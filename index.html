@@ -12,14 +12,15 @@
         <header class="toolbar">
             <div class="toolbar-left">
                 <button class="toolbar-btn active" data-page="tools">
-                    <span class="toolbar-icon">🛠️</span>
-                    <span class="toolbar-text">Утилиты</span>
+                    Утилиты
+                </button>
+                <button class="toolbar-btn" data-page="ai">
+                    AI
                 </button>
             </div>
             <div class="toolbar-right">
                 <button class="toolbar-btn" data-page="settings">
-                    <span class="toolbar-icon">⚙️</span>
-                    <span class="toolbar-text">Настройки</span>
+                    Настройки
                 </button>
             </div>
         </header>
@@ -36,6 +37,35 @@
                         <button class="btn btn-primary utility-open-btn" data-utility="webp-to-png">
                             Открыть
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Страница AI утилит -->
+            <div id="page-ai" class="page">
+                <div class="tools-gallery">
+                    <div class="utility-card" data-utility="upscale">
+                        <div class="utility-icon">🔍</div>
+                        <h3 class="utility-title">Upscale</h3>
+                        <p class="utility-description">Увеличение разрешения изображений с помощью AI</p>
+                        <button class="btn btn-primary utility-open-btn" data-utility="upscale">
+                            Открыть
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Страница утилиты Upscale -->
+            <div id="page-utility-upscale" class="page utility-page">
+                <div class="utility-header">
+                    <button class="back-btn" id="backToGalleryBtnAi">
+                        ← Назад к AI утилитам
+                    </button>
+                    <h2>Upscale</h2>
+                </div>
+                <div class="utility-content">
+                    <div class="tool-card">
+                        <p class="tool-description">Увеличение разрешения изображений с помощью AI. Функционал в разработке.</p>
                     </div>
                 </div>
             </div>
@@ -77,9 +107,6 @@
 
             <!-- Страница настроек -->
             <div id="page-settings" class="page">
-                <div class="page-header">
-                    <h2>Настройки</h2>
-                </div>
                 <div class="settings-container">
                     <!-- Секция: О приложении -->
                     <div class="settings-section">

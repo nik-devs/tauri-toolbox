@@ -38,6 +38,7 @@ jobs:
       
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
+        id: tauri-build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -49,4 +50,37 @@ jobs:
           releaseDraft: false
           prerelease: false
           updaterJsonPath: latest.json
+          projectPath: .
+      
+      - name: Find and upload latest.json
+        if: always()
+        shell: pwsh
+        run: |
+          # Ищем latest.json в возможных местах
+          $jsonPath = $null
+          $possiblePaths = @(
+            "src-tauri\target\release\bundle\nsis\latest.json",
+            "src-tauri\target\release\latest.json",
+            "latest.json"
+          )
+          
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              Write-Host "Found latest.json at: $path"
+              $jsonPath = $path
+              break
+            }
+          }
+          
+          if ($jsonPath) {
+            gh release upload "${{ github.ref_name }}" $jsonPath --repo "${{ github.repository }}"
+            Write-Host "Uploaded latest.json successfully"
+          } else {
+            Write-Host "latest.json not found. Searching..."
+            Get-ChildItem -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host "Found: $($_.FullName)"
+            }
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

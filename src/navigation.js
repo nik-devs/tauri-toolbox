@@ -37,13 +37,31 @@ export function initNavigation() {
                 pages.forEach(page => page.classList.remove('active'));
                 // Показываем страницу утилиты
                 utilityPage.classList.add('active');
+                
+                // Определяем, к какой категории относится утилита
+                const utilityCard = btn.closest('.utility-card');
+                const parentPage = utilityCard?.closest('.page');
+                let activePage = 'tools';
+                if (parentPage?.id === 'page-ai') {
+                    activePage = 'ai';
+                }
+                
+                // Активируем соответствующую кнопку в тулбаре
+                toolbarBtns.forEach(tb => {
+                    if (tb.dataset.page === activePage) {
+                        tb.classList.add('active');
+                    } else {
+                        tb.classList.remove('active');
+                    }
+                });
             }
         });
     });
 
     // Обработка кнопки "Назад к утилитам"
-    if (backToGalleryBtn) {
-        backToGalleryBtn.addEventListener('click', (e) => {
+    const backToGalleryBtnTools = document.getElementById('backToGalleryBtn');
+    if (backToGalleryBtnTools) {
+        backToGalleryBtnTools.addEventListener('click', (e) => {
             e.preventDefault();
             // Скрываем все страницы
             pages.forEach(page => page.classList.remove('active'));
@@ -55,6 +73,29 @@ export function initNavigation() {
             // Активируем кнопку "Утилиты" в тулбаре
             toolbarBtns.forEach(btn => {
                 if (btn.dataset.page === 'tools') {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        });
+    }
+
+    // Обработка кнопки "Назад к AI утилитам"
+    const backToGalleryBtnAi = document.getElementById('backToGalleryBtnAi');
+    if (backToGalleryBtnAi) {
+        backToGalleryBtnAi.addEventListener('click', (e) => {
+            e.preventDefault();
+            // Скрываем все страницы
+            pages.forEach(page => page.classList.remove('active'));
+            // Показываем галерею AI утилит
+            const aiPage = document.getElementById('page-ai');
+            if (aiPage) {
+                aiPage.classList.add('active');
+            }
+            // Активируем кнопку "AI" в тулбаре
+            toolbarBtns.forEach(btn => {
+                if (btn.dataset.page === 'ai') {
                     btn.classList.add('active');
                 } else {
                     btn.classList.remove('active');
