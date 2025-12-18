@@ -54,7 +54,7 @@
         "https://github.com/nik-devs/tauri-toolbox/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": "untrusted comment: minisign public key: 72B11914F65AF967\nRWRn+Vr2FBmxcu2ewc7Nmvxufhta4V3TWdamUsVu+v9vd0eTGrChTRnN"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCRTIwNDBEMzc2OUNCOUUKUldTZXkyazNEUVRpeS9jWkdmU1FOM0pwSWplbTJ3T0FIdDlZMy85ZzF2NmZINUgxbE0vZG9ISmUK"
     }
   }
 }
