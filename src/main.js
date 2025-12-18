@@ -5,6 +5,7 @@ import { getName, getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
 import { initNavigation } from './navigation.js';
 import { initSettings } from './settings.js';
+import { initUpscale } from './upscale.js';
 
 // Проверяем доступность API
 console.log('Tauri window API:', typeof getCurrentWindow);
@@ -15,6 +16,7 @@ const invoke = invokeCore || (window.__TAURI__?.core?.invoke);
 // Инициализация навигации и настроек
 initNavigation();
 initSettings();
+initUpscale();
 
 // Установка версии в заголовок окна
 async function setWindowTitle() {

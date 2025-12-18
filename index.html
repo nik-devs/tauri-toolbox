@@ -17,6 +17,7 @@
                 <button class="toolbar-btn" data-page="ai">
                     AI
                 </button>
+                <div class="toolbar-tabs" id="aiTabsContainer"></div>
             </div>
             <div class="toolbar-right">
                 <button class="toolbar-btn" data-page="settings">
@@ -58,14 +59,52 @@
             <!-- Страница утилиты Upscale -->
             <div id="page-utility-upscale" class="page utility-page">
                 <div class="utility-header">
-                    <button class="back-btn" id="backToGalleryBtnAi">
-                        ← Назад к AI утилитам
-                    </button>
                     <h2>Upscale</h2>
                 </div>
                 <div class="utility-content">
                     <div class="tool-card">
-                        <p class="tool-description">Увеличение разрешения изображений с помощью AI. Функционал в разработке.</p>
+                        <p class="tool-description">Увеличение разрешения изображений с помощью AI</p>
+                        
+                        <div class="tool-content">
+                            <div class="image-selector">
+                                <div id="selectedImage" class="selected-folder" 
+                                     data-dropzone="true">
+                                    <div class="dropzone-placeholder">Перетащите изображение сюда или кликните для выбора</div>
+                                </div>
+                            </div>
+                            
+                            <div id="previewSection" class="preview-section hidden">
+                                <h3>Исходное изображение</h3>
+                                <div class="image-preview-container">
+                                    <img id="previewImage" alt="Preview">
+                                </div>
+                                <p class="file-name" id="fileName"></p>
+                            </div>
+                            
+                            <button id="upscaleBtn" class="btn btn-success" disabled>
+                                🔍 Увеличить разрешение
+                            </button>
+                            
+                            <div id="upscaleProgress" class="progress hidden">
+                                <div class="progress-bar"></div>
+                                <span class="progress-text">Обработка изображения...</span>
+                            </div>
+                            
+                            <div id="resultSection" class="result-section hidden">
+                                <h3>Результат</h3>
+                                <div class="image-preview-container">
+                                    <img id="resultImage" alt="Result">
+                                </div>
+                                <button id="downloadBtn" class="btn btn-primary">
+                                    ⬇️ Скачать результат
+                                </button>
+                                <button id="clearBtn" class="btn btn-secondary">
+                                    Очистить
+                                </button>
+                            </div>
+                            
+                            <div id="upscaleError" class="error-message hidden"></div>
+                        </div>
                     </div>
                 </div>
             </div>
