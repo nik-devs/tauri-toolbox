@@ -1,6 +1,6 @@
 {
   "name": "toolbox",
-  "version": "1.0.10",
+  "version": "1.0.13",
   "description": "Набор утилит для работы",
   "type": "module",
   "scripts": {

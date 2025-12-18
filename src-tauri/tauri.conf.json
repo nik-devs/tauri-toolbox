@@ -1,6 +1,6 @@
 {
   "productName": "Toolbox",
-  "version": "1.0.10",
+  "version": "1.0.13",
   "identifier": "com.toolbox.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -52,7 +52,7 @@
         "https://github.com/nik-devs/tauri-toolbox/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDEyQzkyN0NGMDMzMjRBNDMKUldSRFNqSUR6eWZKRXQya3JTbE9mS0xjQk10YXY4VHNQQUtaTlVLNkt0WXNDUkxuUUNaTnIyeW4K"
+      "pubkey": "untrusted comment: minisign public key: 424065F6C9774566\nRWRmRXfJ9mVAQgio/V/0v/Kh+ARoPmofhCei8X9nkOx3cfrmQJY6afLo"
     }
   }
 }
