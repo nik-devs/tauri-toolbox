@@ -9,6 +9,12 @@ export default function AIPage() {
       icon: '🔍',
       title: 'Upscale',
       description: 'Увеличение разрешения изображений с помощью AI'
+    },
+    {
+      id: 'remove-background',
+      icon: '✂️',
+      title: 'Remove Background',
+      description: 'Удаление фона изображений с помощью AI'
     }
   ];
 

@@ -15,7 +15,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleOpenUtility = useCallback((utilityId) => {
-    const isAiUtility = utilityId === 'upscale';
+    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background';
     
     if (isAiUtility) {
       // Для AI утилит создаем вкладку
@@ -23,7 +23,7 @@ export function AppProvider({ children }) {
       const tab = {
         id: tabId,
         utilityId,
-        title: utilityId === 'upscale' ? 'Upscale' : utilityId,
+        title: utilityId === 'upscale' ? 'Upscale' : utilityId === 'remove-background' ? 'Remove Background' : utilityId,
         active: true
       };
       
