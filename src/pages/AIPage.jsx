@@ -15,6 +15,12 @@ export default function AIPage() {
       icon: '✂️',
       title: 'Remove Background',
       description: 'Удаление фона изображений с помощью AI'
+    },
+    {
+      id: 'frame-to-frame-video',
+      icon: '🎬',
+      title: 'Frame To Frame Video',
+      description: 'Генерация плавного видео-перехода между двумя изображениями'
     }
   ];
 

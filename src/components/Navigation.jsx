@@ -47,7 +47,7 @@ export default function Navigation() {
             const isTabActive = tab.active && currentPage === 'ai';
             
             return (
-              <button
+              <div
                 key={tab.id}
                 className={`toolbar-tab ${isTabActive ? 'active' : ''}`}
                 onClick={() => handleTabClick(tab.id)}
@@ -73,7 +73,7 @@ export default function Navigation() {
                 >
                   ✕
                 </button>
-              </button>
+              </div>
             );
           })}
         </div>

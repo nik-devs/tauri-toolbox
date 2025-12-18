@@ -17,7 +17,8 @@ fn main() {
             commands::delete_webp_files,
             commands::save_settings,
             commands::load_settings,
-            commands::check_path_is_directory
+            commands::check_path_is_directory,
+            commands::replicate_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

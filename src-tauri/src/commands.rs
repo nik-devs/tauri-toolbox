@@ -176,3 +176,98 @@ pub async fn check_path_is_directory(path: String) -> Result<bool, String> {
     Ok(path.exists() && path.is_dir())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReplicateRunRequest {
+    pub model: String,
+    pub input: serde_json::Value,
+    pub api_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReplicateRunResponse {
+    pub output: serde_json::Value,
+}
+
+#[tauri::command]
+pub async fn replicate_run(request: ReplicateRunRequest) -> Result<ReplicateRunResponse, String> {
+    let client = reqwest::Client::new();
+    
+    // Создаем prediction
+    let prediction_url = "https://api.replicate.com/v1/predictions";
+    let prediction_response = client
+        .post(prediction_url)
+        .header("Authorization", format!("Token {}", request.api_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "version": request.model,
+            "input": request.input
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка создания prediction: {}", e))?;
+    
+    if !prediction_response.status().is_success() {
+        let error_text = prediction_response.text().await.unwrap_or_default();
+        return Err(format!("Ошибка API: {}", error_text));
+    }
+    
+    let prediction: serde_json::Value = prediction_response
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка парсинга ответа: {}", e))?;
+    
+    let prediction_id = prediction["id"]
+        .as_str()
+        .ok_or("Не удалось получить ID prediction")?;
+    
+    let get_url = format!("https://api.replicate.com/v1/predictions/{}", prediction_id);
+    
+    // Ждем завершения prediction
+    let output = loop {
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+        
+        let status_response = client
+            .get(&get_url)
+            .header("Authorization", format!("Token {}", request.api_key))
+            .send()
+            .await
+            .map_err(|e| format!("Ошибка проверки статуса: {}", e))?;
+        
+        if !status_response.status().is_success() {
+            let error_text = status_response.text().await.unwrap_or_default();
+            return Err(format!("Ошибка проверки статуса: {}", error_text));
+        }
+        
+        let status_data: serde_json::Value = status_response
+            .json()
+            .await
+            .map_err(|e| format!("Ошибка парсинга статуса: {}", e))?;
+        
+        let status = status_data["status"]
+            .as_str()
+            .ok_or("Не удалось получить статус")?;
+        
+        match status {
+            "succeeded" => {
+                break status_data["output"].clone();
+            }
+            "failed" | "canceled" => {
+                let error = status_data["error"]
+                    .as_str()
+                    .unwrap_or("Неизвестная ошибка");
+                return Err(format!("Prediction failed: {}", error));
+            }
+            "starting" | "processing" => {
+                // Продолжаем ждать
+            }
+            _ => {
+                return Err(format!("Неизвестный статус: {}", status));
+            }
+        }
+    };
+    
+    Ok(ReplicateRunResponse {
+        output,
+    })
+}
+

@@ -75,7 +75,8 @@ jobs:
           }
           
           if ($jsonPath) {
-            gh release upload "${{ github.ref_name }}" $jsonPath --repo "${{ github.repository }}"
+            # Используем --clobber для перезаписи существующего файла
+            gh release upload "${{ github.ref_name }}" $jsonPath --repo "${{ github.repository }}" --clobber
             Write-Host "Uploaded latest.json successfully"
           } else {
             Write-Host "latest.json not found. Searching..."

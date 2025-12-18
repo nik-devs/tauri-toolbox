@@ -15,15 +15,21 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleOpenUtility = useCallback((utilityId) => {
-    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background';
+    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video';
     
     if (isAiUtility) {
       // Для AI утилит создаем вкладку
       const tabId = `ai-tab-${utilityId}-${Date.now()}`;
+      const getTitle = (id) => {
+        if (id === 'upscale') return 'Upscale';
+        if (id === 'remove-background') return 'Remove Background';
+        if (id === 'frame-to-frame-video') return 'Frame To Frame Video';
+        return id;
+      };
       const tab = {
         id: tabId,
         utilityId,
-        title: utilityId === 'upscale' ? 'Upscale' : utilityId === 'remove-background' ? 'Remove Background' : utilityId,
+        title: getTitle(utilityId),
         active: true
       };
       

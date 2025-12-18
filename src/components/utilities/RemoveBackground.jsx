@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
 const MIME_TYPES = {
   '.jpg': 'image/jpeg',
@@ -161,7 +161,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
     // Проверяем размер файла
     if (file.size > MAX_FILE_SIZE) {
-      setError(`Файл слишком большой. Максимальный размер: 5MB. Ваш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      setError(`Файл слишком большой. Максимальный размер: 20MB. Ваш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       return;
     }
 
@@ -372,7 +372,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     try {
       // Проверяем размер файла
       if (selectedFile.size > MAX_FILE_SIZE) {
-        throw new Error(`Файл слишком большой. Максимальный размер: 5MB. Ваш файл: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
+        throw new Error(`Файл слишком большой. Максимальный размер: 20MB. Ваш файл: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
       }
 
       updateTask(taskId, { progress: 10, status: 'running' });
