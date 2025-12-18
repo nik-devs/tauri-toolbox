@@ -67,6 +67,22 @@ npx @tauri-apps/cli signer generate -w ~/.tauri/toolbox.key
    - Создайте тег: `git tag v1.0.0 && git push origin v1.0.0`
    - GitHub Actions автоматически соберет и создаст релиз
 
+### О latest.json
+
+**Да, latest.json обязателен для автообновления Tauri 2.0.** 
+
+Tauri updater не может работать только по версии релиза, потому что ему нужна:
+- **Подпись файла (signature)** - для проверки подлинности обновления (обязательно)
+- **URL для скачивания** - прямой путь к установочному файлу
+- **Метаданные** - версия, дата публикации, заметки
+
+`tauri-action` автоматически создает `latest.json` с подписью при сборке (если `includeUpdaterJson: true` и настроен `TAURI_PRIVATE_KEY`). Файл должен загружаться в релиз автоматически.
+
+Если `latest.json` не создается:
+1. Проверьте, что `TAURI_PRIVATE_KEY` настроен в GitHub Secrets
+2. Проверьте логи GitHub Actions - там будет указано, где искать файл
+3. Файл обычно создается в `src-tauri/target/release/bundle/nsis/latest.json` или рядом с установочным файлом
+
 ### Формат latest.json
 
 ```json
@@ -76,7 +92,7 @@ npx @tauri-apps/cli signer generate -w ~/.tauri/toolbox.key
   "pub_date": "2024-01-01T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "подпись файла",
+      "signature": "подпись файла (обязательно!)",
       "url": "https://github.com/USERNAME/toolbox/releases/download/v1.0.0/toolbox_1.0.0_x64-setup.exe"
     }
   }

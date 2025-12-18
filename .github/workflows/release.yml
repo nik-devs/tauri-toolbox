@@ -1,4 +1,4 @@
-﻿name: Release
+name: Release
 
 on:
   push:
@@ -51,6 +51,7 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           projectPath: .
+          updaterJsonPath: latest.json
       
       - name: Find and upload latest.json
         if: always()
@@ -58,10 +59,10 @@ jobs:
         run: |
           $jsonPath = $null
           $possiblePaths = @(
+            "latest.json",
             "src-tauri\target\release\bundle\nsis\latest.json",
             "src-tauri\target\release\bundle\msi\latest.json",
-            "src-tauri\target\release\latest.json",
-            "latest.json"
+            "src-tauri\target\release\latest.json"
           )
           
           Write-Host "Searching for latest.json..."
@@ -75,7 +76,7 @@ jobs:
           
           if (-not $jsonPath) {
             Write-Host "latest.json not found in standard paths. Searching recursively..."
-            $found = Get-ChildItem -Path "src-tauri" -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $found = Get-ChildItem -Path "." -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($found) {
               $jsonPath = $found.FullName
               Write-Host "Found latest.json at: $jsonPath"
@@ -83,16 +84,25 @@ jobs:
           }
           
           if ($jsonPath) {
-            Write-Host "Uploading latest.json to release..."
-            gh release upload "${{ github.ref_name }}" "$jsonPath" --repo "${{ github.repository }}"
-            Write-Host "Successfully uploaded latest.json"
             Write-Host "Content of latest.json:"
             Get-Content "$jsonPath" | Write-Host
+            
+            Write-Host "Uploading latest.json to release..."
+            gh release upload "${{ github.ref_name }}" "$jsonPath" --repo "${{ github.repository }}" --clobber
+            Write-Host "Successfully uploaded latest.json"
           } else {
-            Write-Host "ERROR: latest.json not found anywhere!"
-            if (Test-Path "src-tauri\target\release") {
-              Write-Host "Listing all files in target/release:"
-              Get-ChildItem -Path "src-tauri\target\release" -Recurse -File | Select-Object FullName | Write-Host
+            Write-Host "WARNING: latest.json not found!"
+            Write-Host "tauri-action should create it automatically with includeUpdaterJson: true"
+            Write-Host "Checking if it was uploaded by tauri-action..."
+            
+            # Проверяем, может быть он уже загружен в релиз
+            $releaseAssets = gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json assets -q '.assets[].name' 2>$null
+            if ($releaseAssets -contains "latest.json") {
+              Write-Host "latest.json already exists in release, skipping upload"
+            } else {
+              Write-Host "ERROR: latest.json not found and not in release!"
+              Write-Host "Make sure TAURI_PRIVATE_KEY is set and tauri-action can sign the update"
+              exit 1
             }
           }
         env:
