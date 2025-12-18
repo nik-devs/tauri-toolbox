@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toolbox</title>
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 Toolbox</h1>
+            <p class="subtitle">Набор утилит для работы</p>
+        </header>
+        
+        <main>
+            <div class="tool-card">
+                <h2>WebP → PNG Конвертер</h2>
+                <p class="tool-description">Конвертирует все WebP изображения в PNG в выбранной папке</p>
+                
+                <div class="tool-content">
+                    <div class="folder-selector">
+                        <button id="selectFolderBtn" class="btn btn-primary">
+                            📁 Выбрать папку
+                        </button>
+                        <div id="selectedFolder" class="selected-folder"></div>
+                    </div>
+                    
+                    <button id="convertBtn" class="btn btn-success" disabled>
+                        🔄 Конвертировать
+                    </button>
+                    
+                    <div id="progress" class="progress hidden">
+                        <div class="progress-bar"></div>
+                        <span class="progress-text">Конвертация...</span>
+                    </div>
+                    
+                    <div id="results" class="results hidden"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
+
