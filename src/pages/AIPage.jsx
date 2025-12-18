@@ -1,0 +1,34 @@
+import { useApp } from '../contexts/AppContext';
+
+export default function AIPage() {
+  const { handleOpenUtility } = useApp();
+  
+  const utilities = [
+    {
+      id: 'upscale',
+      icon: '🔍',
+      title: 'Upscale',
+      description: 'Увеличение разрешения изображений с помощью AI'
+    }
+  ];
+
+  return (
+    <div id="page-ai" className="page active">
+      <div className="tools-gallery">
+        {utilities.map(utility => (
+          <div key={utility.id} className="utility-card" data-utility={utility.id}>
+            <div className="utility-icon">{utility.icon}</div>
+            <h3 className="utility-title">{utility.title}</h3>
+            <p className="utility-description">{utility.description}</p>
+            <button 
+              className="btn btn-primary utility-open-btn" 
+              onClick={() => handleOpenUtility(utility.id)}
+            >
+              Открыть
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
