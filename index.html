@@ -7,35 +7,114 @@
     <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🔧 Toolbox</h1>
-            <p class="subtitle">Набор утилит для работы</p>
+    <div class="app-container">
+        <!-- Тулбар -->
+        <header class="toolbar">
+            <div class="toolbar-left">
+                <button class="toolbar-btn active" data-page="tools">
+                    <span class="toolbar-icon">🛠️</span>
+                    <span class="toolbar-text">Утилиты</span>
+                </button>
+            </div>
+            <div class="toolbar-right">
+                <button class="toolbar-btn" data-page="settings">
+                    <span class="toolbar-icon">⚙️</span>
+                    <span class="toolbar-text">Настройки</span>
+                </button>
+            </div>
         </header>
-        
-        <main>
-            <div class="tool-card">
-                <h2>WebP → PNG Конвертер</h2>
-                <p class="tool-description">Конвертирует все WebP изображения в PNG в выбранной папке</p>
-                
-                <div class="tool-content">
-                    <div class="folder-selector">
-                        <button id="selectFolderBtn" class="btn btn-primary">
-                            📁 Выбрать папку
+
+        <!-- Основной контент -->
+        <main class="main-content">
+            <!-- Страница галереи утилит -->
+            <div id="page-tools" class="page active">
+                <div class="tools-gallery">
+                    <div class="utility-card" data-utility="webp-to-png">
+                        <div class="utility-icon">🖼️</div>
+                        <h3 class="utility-title">WebP → PNG Конвертер</h3>
+                        <p class="utility-description">Конвертирует все WebP изображения в PNG в выбранной папке</p>
+                        <button class="btn btn-primary utility-open-btn" data-utility="webp-to-png">
+                            Открыть
                         </button>
-                        <div id="selectedFolder" class="selected-folder"></div>
                     </div>
-                    
-                    <button id="convertBtn" class="btn btn-success" disabled>
-                        🔄 Конвертировать
+                </div>
+            </div>
+
+            <!-- Страница утилиты WebP → PNG -->
+            <div id="page-utility-webp-to-png" class="page utility-page">
+                <div class="utility-header">
+                    <button class="back-btn" id="backToGalleryBtn">
+                        ← Назад к утилитам
                     </button>
-                    
-                    <div id="progress" class="progress hidden">
-                        <div class="progress-bar"></div>
-                        <span class="progress-text">Конвертация...</span>
+                    <h2>WebP → PNG Конвертер</h2>
+                </div>
+                <div class="utility-content">
+                    <div class="tool-card">
+                        <p class="tool-description">Конвертирует все WebP изображения в PNG в выбранной папке</p>
+                        
+                        <div class="tool-content">
+                            <div class="folder-selector">
+                                <div id="selectedFolder" class="selected-folder" 
+                                     data-dropzone="true">
+                                    <div class="dropzone-placeholder">Перетащите папку сюда или кликните для выбора</div>
+                                </div>
+                            </div>
+                            
+                            <button id="convertBtn" class="btn btn-success" disabled>
+                                🔄 Конвертировать
+                            </button>
+                            
+                            <div id="progress" class="progress hidden">
+                                <div class="progress-bar"></div>
+                                <span class="progress-text">Конвертация...</span>
+                            </div>
+                            
+                            <div id="results" class="results hidden"></div>
+                        </div>
                     </div>
-                    
-                    <div id="results" class="results hidden"></div>
+                </div>
+            </div>
+
+            <!-- Страница настроек -->
+            <div id="page-settings" class="page">
+                <div class="page-header">
+                    <h2>Настройки</h2>
+                </div>
+                <div class="settings-container">
+                    <!-- Секция: Ключи API -->
+                    <div class="settings-section">
+                        <div class="settings-section-header">
+                            <h3>🔑 Ключи API</h3>
+                            <p class="section-description">Все поля необязательны к заполнению</p>
+                        </div>
+                        <div class="settings-section-content">
+                            <div class="form-group">
+                                <label for="apiKeyFAL">FAL</label>
+                                <input type="password" id="apiKeyFAL" class="form-input" placeholder="Введите ключ FAL" autocomplete="new-password">
+                            </div>
+                            <div class="form-group">
+                                <label for="apiKeyReplicate">Replicate</label>
+                                <input type="password" id="apiKeyReplicate" class="form-input" placeholder="Введите ключ Replicate" autocomplete="new-password">
+                            </div>
+                            <div class="form-group">
+                                <label for="apiKeyHF">HF (HuggingFace)</label>
+                                <input type="password" id="apiKeyHF" class="form-input" placeholder="Введите ключ HuggingFace" autocomplete="new-password">
+                            </div>
+                            <div class="form-group">
+                                <label for="apiKeyGPT">GPT</label>
+                                <input type="password" id="apiKeyGPT" class="form-input" placeholder="Введите ключ GPT" autocomplete="new-password">
+                            </div>
+                            <div class="form-group">
+                                <label for="apiKeyGrok">Grok</label>
+                                <input type="password" id="apiKeyGrok" class="form-input" placeholder="Введите ключ Grok" autocomplete="new-password">
+                            </div>
+                            <div class="form-actions">
+                                <button id="exportKeysBtn" type="button" class="btn btn-secondary">📤 Экспорт JSON</button>
+                                <button id="importKeysBtn" type="button" class="btn btn-secondary">📥 Импорт JSON</button>
+                                <button id="saveKeysBtn" type="button" class="btn btn-primary">💾 Сохранить</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -44,4 +123,3 @@
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
-

@@ -14,7 +14,10 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::convert_webp_to_png,
-            commands::delete_webp_files
+            commands::delete_webp_files,
+            commands::save_settings,
+            commands::load_settings,
+            commands::check_path_is_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

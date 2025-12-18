@@ -116,3 +116,63 @@ pub async fn delete_webp_files(folder_path: String) -> Result<usize, String> {
     Ok(deleted)
 }
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct Settings {
+    pub api_keys: Option<ApiKeys>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct ApiKeys {
+    #[serde(rename = "FAL")]
+    pub fal: Option<String>,
+    #[serde(rename = "Replicate")]
+    pub replicate: Option<String>,
+    #[serde(rename = "HF")]
+    pub hf: Option<String>,
+    #[serde(rename = "GPT")]
+    pub gpt: Option<String>,
+    #[serde(rename = "Grok")]
+    pub grok: Option<String>,
+}
+
+fn get_settings_path() -> Result<PathBuf, String> {
+    // Используем стандартную папку конфигурации пользователя
+    let home_dir = dirs::home_dir()
+        .ok_or("Не удалось получить домашнюю папку")?;
+    let config_dir = home_dir.join(".toolbox");
+    fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Ошибка создания папки конфигурации: {}", e))?;
+    Ok(config_dir.join("settings.json"))
+}
+
+#[tauri::command]
+pub async fn save_settings(settings: Settings) -> Result<(), String> {
+    let settings_path = get_settings_path()?;
+    let json = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Ошибка сериализации настроек: {}", e))?;
+    fs::write(&settings_path, json)
+        .map_err(|e| format!("Ошибка записи настроек: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn load_settings() -> Result<Settings, String> {
+    let settings_path = get_settings_path()?;
+    
+    if !settings_path.exists() {
+        return Ok(Settings::default());
+    }
+    
+    let json = fs::read_to_string(&settings_path)
+        .map_err(|e| format!("Ошибка чтения настроек: {}", e))?;
+    let settings: Settings = serde_json::from_str(&json)
+        .map_err(|e| format!("Ошибка парсинга настроек: {}", e))?;
+    Ok(settings)
+}
+
+#[tauri::command]
+pub async fn check_path_is_directory(path: String) -> Result<bool, String> {
+    let path = Path::new(&path);
+    Ok(path.exists() && path.is_dir())
+}
+

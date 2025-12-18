@@ -16,6 +16,19 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    scrollbar-width: none; /* Firefox - скрытие скроллбара */
+    -ms-overflow-style: none; /* IE и Edge - скрытие скроллбара */
+}
+
+/* Скрытие скроллбара для WebKit браузеров (Chrome, Safari, Opera) */
+*::-webkit-scrollbar {
+    display: none;
+}
+
+html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
 }
 
 body {
@@ -23,13 +36,200 @@ body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
+    margin: 0;
+    padding: 0;
     min-height: 100vh;
+    height: 100%;
+    overflow: hidden;
 }
 
-.container {
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Тулбар */
+.toolbar {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 100;
+    margin: 0;
+    min-height: auto;
+    height: auto;
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.toolbar-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.toolbar-btn.active {
+    background: var(--bg-tertiary);
+    color: var(--accent);
+}
+
+.toolbar-icon {
+    font-size: 1.1rem;
+}
+
+.toolbar-text {
+    font-weight: 500;
+}
+
+/* Основной контент */
+.main-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    padding-top: 1rem;
+}
+
+.page {
+    display: none;
+    margin: 0;
+    padding: 0;
+}
+
+.page.active {
+    display: block;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h2 {
+    font-size: 2rem;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* Галерея утилит */
+.tools-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    max-width: 1200px;
+    margin: 0;
+}
+
+.utility-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.utility-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.2);
+}
+
+.utility-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.utility-title {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    margin: 0 0 0.5rem 0;
+    font-weight: 600;
+}
+
+.utility-description {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0 0 1.5rem 0;
+    line-height: 1.5;
+    flex: 1;
+}
+
+.utility-open-btn {
+    width: 100%;
+    margin-top: auto;
+}
+
+/* Страница утилиты */
+.utility-page {
     max-width: 800px;
     margin: 0 auto;
-    padding: 2rem;
+}
+
+.utility-header {
+    margin-bottom: 1rem;
+}
+
+.utility-header h2 {
+    font-size: 2rem;
+    color: var(--text-primary);
+    margin: 0.5rem 0 0 0;
+}
+
+.back-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0.5rem 0;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.back-btn:hover {
+    color: var(--accent);
+}
+
+.utility-content {
+    margin-top: 1rem;
+}
+
+.tool-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
 }
 
 header {
@@ -130,18 +330,71 @@ main {
     padding: 1rem;
     background: var(--bg-tertiary);
     border-radius: 8px;
-    border: 1px solid var(--border);
+    border: 2px dashed var(--border);
     color: var(--text-secondary);
     font-size: 0.9rem;
     word-break: break-all;
     min-height: 3rem;
     display: flex;
     align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
 }
 
 .selected-folder.has-folder {
     color: var(--text-primary);
     border-color: var(--accent);
+    border-style: solid;
+    justify-content: space-between;
+    padding-right: 0.5rem;
+}
+
+.selected-folder.drag-over {
+    border-color: var(--accent);
+    background: rgba(74, 158, 255, 0.1);
+    border-style: solid;
+}
+
+.dropzone-placeholder {
+    width: 100%;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.selected-folder.has-folder .dropzone-placeholder {
+    display: none;
+}
+
+.folder-path {
+    word-break: break-all;
+    flex: 1;
+    text-align: left;
+    padding-right: 0.5rem;
+}
+
+.clear-folder-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.clear-folder-btn:hover {
+    background: rgba(244, 67, 54, 0.2);
+    color: var(--error);
+    transform: scale(1.1);
 }
 
 .progress {
@@ -304,5 +557,117 @@ main {
 
 .btn-secondary:hover {
     background: var(--bg-primary);
+}
+
+/* Настройки */
+.settings-container {
+    max-width: 800px;
+}
+
+.settings-section {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 2rem;
+    border: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+}
+
+.settings-section-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-section-header h3 {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.section-description {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.settings-section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.95rem;
+}
+
+.form-input {
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-family: inherit;
+    transition: all 0.2s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+}
+
+.form-input::placeholder {
+    color: var(--text-secondary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+/* Уведомления */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 1rem 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s ease;
+    max-width: 400px;
+}
+
+.notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.notification-success {
+    border-color: var(--success);
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.notification-error {
+    border-color: var(--error);
+    background: rgba(244, 67, 54, 0.1);
 }
 
