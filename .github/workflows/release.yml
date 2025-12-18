@@ -1,10 +1,10 @@
-name: Release
+﻿name: Release
 
 on:
   push:
     tags:
-      - 'v*'  # Запускается при push тега вида v1.0.0, v1.1.0 и т.д.
-  workflow_dispatch:  # Позволяет запускать вручную из GitHub UI
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   create-release:
@@ -49,21 +49,22 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: false
           prerelease: false
-          updaterJsonPath: latest.json
+          includeUpdaterJson: true
           projectPath: .
       
       - name: Find and upload latest.json
         if: always()
         shell: pwsh
         run: |
-          # Ищем latest.json в возможных местах
           $jsonPath = $null
           $possiblePaths = @(
             "src-tauri\target\release\bundle\nsis\latest.json",
+            "src-tauri\target\release\bundle\msi\latest.json",
             "src-tauri\target\release\latest.json",
             "latest.json"
           )
           
+          Write-Host "Searching for latest.json..."
           foreach ($path in $possiblePaths) {
             if (Test-Path $path) {
               Write-Host "Found latest.json at: $path"
@@ -72,15 +73,27 @@ jobs:
             }
           }
           
+          if (-not $jsonPath) {
+            Write-Host "latest.json not found in standard paths. Searching recursively..."
+            $found = Get-ChildItem -Path "src-tauri" -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+              $jsonPath = $found.FullName
+              Write-Host "Found latest.json at: $jsonPath"
+            }
+          }
+          
           if ($jsonPath) {
-            gh release upload "${{ github.ref_name }}" $jsonPath --repo "${{ github.repository }}"
-            Write-Host "Uploaded latest.json successfully"
+            Write-Host "Uploading latest.json to release..."
+            gh release upload "${{ github.ref_name }}" "$jsonPath" --repo "${{ github.repository }}"
+            Write-Host "Successfully uploaded latest.json"
+            Write-Host "Content of latest.json:"
+            Get-Content "$jsonPath" | Write-Host
           } else {
-            Write-Host "latest.json not found. Searching..."
-            Get-ChildItem -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | ForEach-Object {
-              Write-Host "Found: $($_.FullName)"
+            Write-Host "ERROR: latest.json not found anywhere!"
+            if (Test-Path "src-tauri\target\release") {
+              Write-Host "Listing all files in target/release:"
+              Get-ChildItem -Path "src-tauri\target\release" -Recurse -File | Select-Object FullName | Write-Host
             }
           }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
