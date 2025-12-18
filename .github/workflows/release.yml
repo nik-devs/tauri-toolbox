@@ -3,12 +3,14 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'          # триггер на пуш тега, начинающегося с "v"
-  workflow_dispatch:   # возможность запускать вручную
+      - 'v*'  # только теги вида v1.0.0
+  workflow_dispatch:             # можно запускать вручную
 
 jobs:
   release:
-    runs-on: windows-latest   # или macos-latest/linux-latest, если нужно
+    if: startsWith(github.ref, 'refs/tags/v')  # проверяем, что это тег
+    runs-on: windows-latest
+
     steps:
       # 1. Клонируем репозиторий
       - uses: actions/checkout@v4
@@ -30,12 +32,13 @@ jobs:
       # 5. Собираем Tauri-приложение и создаём latest.json
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}          # автоматически доступен
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }} # приватный ключ для подписи
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }} # если есть пароль к ключу
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ✅ Обратите внимание: TAURI_SIGNING_PRIVATE_KEY для NSIS
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}        # берём имя тега для релиза
+          tagName: ${{ github.ref_name }}
           releaseName: "Toolbox ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true               # генерируем latest.json
+          includeUpdaterJson: true
