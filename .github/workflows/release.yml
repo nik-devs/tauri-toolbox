@@ -3,262 +3,39 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'          # триггер на пуш тега, начинающегося с "v"
+  workflow_dispatch:   # возможность запускать вручную
 
 jobs:
-  create-release:
-    permissions:
-      contents: write
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: 'x64'
-    
+  release:
+    runs-on: windows-latest   # или macos-latest/linux-latest, если нужно
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # 1. Клонируем репозиторий
+      - uses: actions/checkout@v4
+
+      # 2. Устанавливаем Node.js
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: 'npm'
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+
+      # 3. Устанавливаем зависимости фронтенда
+      - run: npm ci
+
+      # 4. Устанавливаем Rust
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build the app
-        uses: tauri-apps/tauri-action@v0
-        id: tauri-build
+
+      # 5. Собираем Tauri-приложение и создаём latest.json
+      - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}          # автоматически доступен
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }} # приватный ключ для подписи
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }} # если есть пароль к ключу
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Toolbox ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version and install.'
+          tagName: ${{ github.ref_name }}        # берём имя тега для релиза
+          releaseName: "Toolbox ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
-          projectPath: .
-      
-      - name: Create latest.json with signature
-        if: always()
-        shell: pwsh
-        run: |
-          # Проверяем, был ли latest.json создан tauri-action
-          $jsonPath = $null
-          $possiblePaths = @(
-            "latest.json",
-            "src-tauri\target\release\bundle\nsis\latest.json",
-            "src-tauri\target\release\bundle\msi\latest.json",
-            "src-tauri\target\release\latest.json"
-          )
-          
-          Write-Host "Searching for existing latest.json..."
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              $content = Get-Content $path -Raw | ConvertFrom-Json
-              if ($content.platforms.'windows-x86_64'.signature) {
-                Write-Host "Found valid latest.json with signature at: $path"
-                $jsonPath = $path
-                break
-              } else {
-                Write-Host "Found latest.json without signature at: $path, will recreate"
-              }
-            }
-          }
-          
-          if (-not $jsonPath) {
-            Write-Host "Creating latest.json with signature..."
-            
-            # Находим установочный файл
-            $setupFile = $null
-            $setupPath = $null
-            $setupPaths = @(
-              "src-tauri\target\release\bundle\nsis\*.exe",
-              "src-tauri\target\release\bundle\msi\*.msi"
-            )
-            
-            foreach ($pattern in $setupPaths) {
-              $files = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue
-              if ($files) {
-                $setupFile = $files[0].Name
-                $setupPath = $files[0].FullName
-                Write-Host "Found setup file: $setupFile"
-                break
-              }
-            }
-            
-            if (-not $setupFile) {
-              Write-Host "ERROR: Setup file not found!"
-              exit 1
-            }
-            
-            # Читаем версию из Cargo.toml
-            $cargoToml = Get-Content "src-tauri\Cargo.toml" -Raw
-            $version = "1.0.0"
-            if ($cargoToml -match 'version\s*=\s*"([^"]+)"') {
-              $version = $matches[1]
-            }
-            
-            $tag = "${{ github.ref_name }}"
-            $repo = "${{ github.repository }}"
-            $setupUrl = "https://github.com/$repo/releases/download/$tag/$setupFile"
-            
-            # Сохраняем приватный ключ во временный файл
-            # Ключ может быть в base64 (как в GitHub Secrets) или уже декодирован
-            $keyPath = "$env:RUNNER_TEMP\tauri.key"
-            $keyContent = $env:TAURI_PRIVATE_KEY
-            
-            # Проверяем, нужно ли декодировать из base64
-            # Если ключ НЕ начинается с "untrusted comment:", значит он в base64
-            if ($keyContent -notmatch '^untrusted comment:') {
-              Write-Host "Key appears to be base64 encoded, decoding..."
-              try {
-                $keyBytes = [System.Convert]::FromBase64String($keyContent.Trim())
-                $keyContent = [System.Text.Encoding]::UTF8.GetString($keyBytes)
-                Write-Host "Key decoded successfully (starts with: $($keyContent.Substring(0, [Math]::Min(30, $keyContent.Length))))"
-              } catch {
-                Write-Host "WARNING: Failed to decode base64, trying to use as-is"
-                Write-Host "Error: $_"
-              }
-            } else {
-              Write-Host "Key is already decoded (starts with 'untrusted comment:')"
-            }
-            
-            # Сохраняем ключ в файл
-            $keyContent | Out-File -FilePath $keyPath -Encoding utf8 -NoNewline
-            Write-Host "Private key saved to: $keyPath"
-            
-            # Подписываем установочный файл
-            Write-Host "Signing installer file: $setupPath"
-            $signArgs = @(
-              "@tauri-apps/cli",
-              "signer",
-              "sign",
-              "--private-key", $keyPath,
-              "--file", $setupPath
-            )
-            
-            if ($env:TAURI_KEY_PASSWORD) {
-              $signArgs += "--password"
-              $signArgs += $env:TAURI_KEY_PASSWORD
-            }
-            
-            $signOutput = & npx $signArgs 2>&1 | Out-String
-            Write-Host "Sign command output:"
-            Write-Host $signOutput
-            
-            # Извлекаем подпись (обычно в формате "Signature: <base64>")
-            $signature = ""
-            if ($signOutput -match '(?m)^Signature:\s*(.+)$') {
-              $signature = $matches[1].Trim()
-            } elseif ($signOutput -match '([A-Za-z0-9+/=]{200,})') {
-              # Альтернативный способ - ищем длинную base64 строку
-              $signature = $matches[1].Trim()
-            }
-            
-            # Удаляем временный ключ
-            Remove-Item $keyPath -ErrorAction SilentlyContinue
-            
-            if (-not $signature) {
-              Write-Host "ERROR: Could not extract signature from signer output"
-              Write-Host "Full output was:"
-              Write-Host $signOutput
-              Write-Host ""
-              Write-Host "Please verify:"
-              Write-Host "1. TAURI_PRIVATE_KEY is correctly set in GitHub Secrets"
-              Write-Host "2. The private key format is correct (should start with 'untrusted comment:')"
-              Write-Host "3. TAURI_KEY_PASSWORD matches the key password (if used)"
-              exit 1
-            }
-            
-            Write-Host "Signature extracted successfully (length: $($signature.Length) chars)"
-            
-            # Создаем latest.json
-            $latestJson = @{
-              version = $version
-              notes = "See the assets to download this version and install."
-              pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-              platforms = @{
-                "windows-x86_64" = @{
-                  signature = $signature
-                  url = $setupUrl
-                }
-              }
-            }
-            
-            $jsonPath = "latest.json"
-            $latestJson | ConvertTo-Json -Depth 10 | Set-Content $jsonPath -Encoding utf8
-            Write-Host "Created latest.json:"
-            Get-Content $jsonPath | Write-Host
-          }
-        env:
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-      
-      - name: Find and upload latest.json
-        if: always()
-        shell: pwsh
-        run: |
-          $jsonPath = $null
-          $possiblePaths = @(
-            "latest.json",
-            "src-tauri\target\release\bundle\nsis\latest.json",
-            "src-tauri\target\release\bundle\msi\latest.json",
-            "src-tauri\target\release\latest.json"
-          )
-          
-          Write-Host "Searching for latest.json..."
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              Write-Host "Found latest.json at: $path"
-              $jsonPath = $path
-              break
-            }
-          }
-          
-          if (-not $jsonPath) {
-            Write-Host "latest.json not found in standard paths. Searching recursively..."
-            $found = Get-ChildItem -Path "." -Recurse -Filter "latest.json" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($found) {
-              $jsonPath = $found.FullName
-              Write-Host "Found latest.json at: $jsonPath"
-            }
-          }
-          
-          if ($jsonPath) {
-            Write-Host "Content of latest.json:"
-            Get-Content "$jsonPath" | Write-Host
-            
-            Write-Host "Uploading latest.json to release..."
-            gh release upload "${{ github.ref_name }}" "$jsonPath" --repo "${{ github.repository }}" --clobber
-            Write-Host "Successfully uploaded latest.json"
-          } else {
-            Write-Host "WARNING: latest.json not found!"
-            Write-Host "tauri-action should create it automatically with includeUpdaterJson: true"
-            Write-Host "Checking if it was uploaded by tauri-action..."
-            
-            # Проверяем, может быть он уже загружен в релиз
-            $releaseAssets = gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json assets -q '.assets[].name' 2>$null
-            if ($releaseAssets -contains "latest.json") {
-              Write-Host "latest.json already exists in release, skipping upload"
-            } else {
-              Write-Host "ERROR: latest.json not found and not in release!"
-              Write-Host "Make sure TAURI_PRIVATE_KEY is set and tauri-action can sign the update"
-              exit 1
-            }
-          }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          includeUpdaterJson: true               # генерируем latest.json
