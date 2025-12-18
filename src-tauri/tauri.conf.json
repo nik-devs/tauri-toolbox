@@ -26,9 +26,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": [
-      "nsis"
-    ],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -54,7 +52,7 @@
         "https://github.com/nik-devs/tauri-toolbox/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCRTIwNDBEMzc2OUNCOUUKUldTZXkyazNEUVRpeS9jWkdmU1FOM0pwSWplbTJ3T0FIdDlZMy85ZzF2NmZINUgxbE0vZG9ISmUK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDEyQzkyN0NGMDMzMjRBNDMKUldSRFNqSUR6eWZKRXQya3JTbE9mS0xjQk10YXY4VHNQQUtaTlVLNkt0WXNDUkxuUUNaTnIyeW4K"
     }
   }
 }
