@@ -16,7 +16,9 @@
     "fs:allow-write-text-file",
     "fs:allow-remove",
     "fs:write-all",
-    "fs:read-all"
+    "fs:read-all",
+    "updater:default",
+    "updater:allow-check"
   ]
 }
 

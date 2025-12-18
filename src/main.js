@@ -1,6 +1,8 @@
 import { invoke as invokeCore } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getName, getVersion } from '@tauri-apps/api/app';
+import { check } from '@tauri-apps/plugin-updater';
 import { initNavigation } from './navigation.js';
 import { initSettings } from './settings.js';
 
@@ -13,6 +15,91 @@ const invoke = invokeCore || (window.__TAURI__?.core?.invoke);
 // Инициализация навигации и настроек
 initNavigation();
 initSettings();
+
+// Установка версии в заголовок окна
+async function setWindowTitle() {
+    try {
+        const [name, version] = await Promise.all([getName(), getVersion()]);
+        const appWindow = getCurrentWindow();
+        await appWindow.setTitle(`${name} v${version}`);
+    } catch (error) {
+        console.error('Ошибка при установке заголовка окна:', error);
+    }
+}
+
+// Проверка обновлений
+async function checkForUpdates(showNotification = false) {
+    try {
+        console.log('Проверка обновлений...');
+        const update = await check();
+        console.log('Результат проверки:', update);
+        if (update?.available) {
+            console.log('Найдено обновление:', update.version);
+            if (showNotification) {
+                showUpdateNotification(update);
+            }
+            // Плагин автоматически покажет диалог, если dialog: true в конфиге
+            return update;
+        } else {
+            if (showNotification) {
+                showNotificationMessage('Обновления не найдены. У вас установлена последняя версия.', 'success');
+            }
+            console.log('Обновления не найдены');
+            return null;
+        }
+    } catch (error) {
+        console.error('Ошибка при проверке обновлений:', error);
+        console.error('Тип ошибки:', typeof error);
+        console.error('Сообщение ошибки:', error.message);
+        console.error('Стек ошибки:', error.stack);
+        if (showNotification) {
+            showNotificationMessage('Ошибка при проверке обновлений: ' + (error.message || String(error)), 'error');
+        }
+        return null;
+    }
+}
+
+// Показ уведомления об обновлении
+function showUpdateNotification(update) {
+    const currentVersion = document.getElementById('currentVersion')?.textContent || 'неизвестна';
+    const message = `Доступна новая версия: ${update.version}\nТекущая версия: ${currentVersion}`;
+    
+    if (confirm(message + '\n\nХотите установить обновление сейчас?')) {
+        update.downloadAndInstall(
+            (chunkLength, contentLength) => {
+                console.log(`Загружено: ${chunkLength}/${contentLength || 0}`);
+            },
+            () => {
+                console.log('Установка обновления...');
+            }
+        ).then(() => {
+            showNotificationMessage('Обновление установлено. Приложение будет перезапущено.', 'success');
+        }).catch((error) => {
+            showNotificationMessage('Ошибка при установке обновления: ' + error.message, 'error');
+        });
+    }
+}
+
+// Показ уведомления
+function showNotificationMessage(message, type = 'info') {
+    // Простое уведомление через alert, можно заменить на более красивое
+    alert(message);
+}
+
+// Устанавливаем заголовок и проверяем обновления после загрузки DOM
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        setWindowTitle();
+        // Автоматическая проверка обновлений при запуске (без уведомления, если обновлений нет)
+        checkForUpdates(false);
+    });
+} else {
+    setWindowTitle();
+    checkForUpdates(false);
+}
+
+// Экспортируем функцию для использования в настройках
+window.checkForUpdates = checkForUpdates;
 
 // WebP → PNG Конвертер
 let selectedFolderPath = null;

@@ -1,6 +1,8 @@
 import { invoke as invokeCore } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { getVersion } from '@tauri-apps/api/app';
+import { check } from '@tauri-apps/plugin-updater';
 
 const invoke = invokeCore || (window.__TAURI__?.core?.invoke);
 
@@ -119,15 +121,77 @@ export async function importApiKeys() {
     }
 }
 
+// Загрузка версии приложения
+async function loadAppVersion() {
+    try {
+        const version = await getVersion();
+        const versionElement = document.getElementById('currentVersion');
+        if (versionElement) {
+            versionElement.textContent = `v${version}`;
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке версии:', error);
+        const versionElement = document.getElementById('currentVersion');
+        if (versionElement) {
+            versionElement.textContent = 'Ошибка загрузки';
+        }
+    }
+}
+
+// Проверка обновлений
+async function checkForUpdates() {
+    const checkBtn = document.getElementById('checkUpdatesBtn');
+    if (checkBtn) {
+        checkBtn.disabled = true;
+        checkBtn.textContent = '⏳ Проверка...';
+    }
+
+    try {
+        const update = await check();
+        if (update?.available) {
+            const currentVersion = document.getElementById('currentVersion')?.textContent || 'неизвестна';
+            const message = `Доступна новая версия: ${update.version}\nТекущая версия: ${currentVersion}\n\nХотите установить обновление сейчас?`;
+            
+            if (confirm(message)) {
+                checkBtn.textContent = '⬇️ Загрузка...';
+                await update.downloadAndInstall(
+                    (chunkLength, contentLength) => {
+                        console.log(`Загружено: ${chunkLength}/${contentLength || 0}`);
+                    },
+                    () => {
+                        checkBtn.textContent = '⚙️ Установка...';
+                        console.log('Установка обновления...');
+                    }
+                );
+                showNotification('Обновление установлено. Приложение будет перезапущено.', 'success');
+            }
+        } else {
+            showNotification('Обновления не найдены. У вас установлена последняя версия.', 'success');
+        }
+    } catch (error) {
+        console.error('Ошибка при проверке обновлений:', error);
+        showNotification('Ошибка при проверке обновлений: ' + (error.message || String(error)), 'error');
+    } finally {
+        if (checkBtn) {
+            checkBtn.disabled = false;
+            checkBtn.textContent = '🔄 Проверить обновления';
+        }
+    }
+}
+
 // Инициализация настроек
 export function initSettings() {
     // Загружаем сохраненные ключи при загрузке страницы
     loadApiKeys();
+    
+    // Загружаем версию приложения
+    loadAppVersion();
 
     // Обработчики кнопок
     document.getElementById('saveKeysBtn')?.addEventListener('click', saveApiKeys);
     document.getElementById('exportKeysBtn')?.addEventListener('click', exportApiKeys);
     document.getElementById('importKeysBtn')?.addEventListener('click', importApiKeys);
+    document.getElementById('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
 }
 
 // Показ уведомлений
