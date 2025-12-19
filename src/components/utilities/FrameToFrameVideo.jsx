@@ -2,7 +2,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, openFileDialog } from '../../hooks/useTauri';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 
@@ -27,24 +26,36 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
   const savedState = getTabState(tabId);
   
   // Инициализируем состояние из сохраненных данных
-  const [startFile, setStartFile] = useState(null);
-  const [endFile, setEndFile] = useState(null);
-  const [startPreviewUrl, setStartPreviewUrl] = useState(savedState?.startPreviewUrl || null);
-  const [endPreviewUrl, setEndPreviewUrl] = useState(savedState?.endPreviewUrl || null);
+  const [images, setImages] = useState(() => {
+    const savedImages = [];
+    if (savedState?.startPreviewUrl) {
+      savedImages.push({
+        previewUrl: savedState.startPreviewUrl,
+        name: savedState.startFileName || 'start.jpg',
+        path: savedState.startFilePath,
+        file: null
+      });
+    }
+    if (savedState?.endPreviewUrl) {
+      savedImages.push({
+        previewUrl: savedState.endPreviewUrl,
+        name: savedState.endFileName || 'end.jpg',
+        path: savedState.endFilePath,
+        file: null
+      });
+    }
+    return savedImages;
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultUrl, setResultUrl] = useState(savedState?.resultUrl || null);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [draggedOverDropzone, setDraggedOverDropzone] = useState(null); // 'start' | 'end' | null
+  const [draggedImageIndex, setDraggedImageIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const [durationSeconds, setDurationSeconds] = useState(savedState?.durationSeconds ?? 3);
   const [prompt, setPrompt] = useState(savedState?.prompt ?? 'animate');
-  const startDropzoneRef = useRef(null);
-  const endDropzoneRef = useRef(null);
+  const dropzoneRef = useRef(null);
   const currentTaskIdRef = useRef(savedState?.taskId || null);
-  const startFileNameRef = useRef(savedState?.startFileName || null);
-  const endFileNameRef = useRef(savedState?.endFileName || null);
-  const startFilePathRef = useRef(savedState?.startFilePath || null);
-  const endFilePathRef = useRef(savedState?.endFilePath || null);
   const restoredTabIdRef = useRef(null);
 
   // Восстанавливаем состояние при монтировании или смене tabId
@@ -56,26 +67,8 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       const state = getTabState(tabId);
       if (!state) return;
       
-      if (state.startPreviewUrl) {
-        setStartPreviewUrl(state.startPreviewUrl);
-      }
-      if (state.endPreviewUrl) {
-        setEndPreviewUrl(state.endPreviewUrl);
-      }
       if (state.resultUrl) {
         setResultUrl(state.resultUrl);
-      }
-      if (state.startFileName) {
-        startFileNameRef.current = state.startFileName;
-      }
-      if (state.endFileName) {
-        endFileNameRef.current = state.endFileName;
-      }
-      if (state.startFilePath) {
-        startFilePathRef.current = state.startFilePath;
-      }
-      if (state.endFilePath) {
-        endFilePathRef.current = state.endFilePath;
       }
       if (state.taskId) {
         currentTaskIdRef.current = state.taskId;
@@ -83,25 +76,12 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       if (state.durationSeconds !== undefined) {
         setDurationSeconds(state.durationSeconds);
       }
-      
-      if (state.taskId) {
-        const task = getTask(state.taskId);
-        if (task) {
-          if (task.status === 'running') {
-            setIsProcessing(true);
-          }
-          if (task.status === 'completed' && task.resultUrl) {
-            setResultUrl(task.resultUrl);
-            setIsProcessing(false);
-          }
-          if (task.status === 'failed') {
-            setError(task.error || 'Ошибка выполнения задачи');
-            setIsProcessing(false);
-          }
-        }
+      if (state.prompt) {
+        setPrompt(state.prompt);
       }
       
       // Восстанавливаем файлы
+      const restoredImages = [];
       if (state.startFilePath && state.startPreviewUrl) {
         try {
           const fileData = await readFile(state.startFilePath);
@@ -113,7 +93,12 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
           const fileObj = new File([blob], fileName, { type: mimeType });
           fileObj.path = state.startFilePath;
           
-          setStartFile(fileObj);
+          restoredImages.push({
+            previewUrl: state.startPreviewUrl,
+            name: fileName,
+            path: state.startFilePath,
+            file: fileObj
+          });
         } catch (err) {
           console.error('Не удалось восстановить start файл:', err);
         }
@@ -130,9 +115,35 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
           const fileObj = new File([blob], fileName, { type: mimeType });
           fileObj.path = state.endFilePath;
           
-          setEndFile(fileObj);
+          restoredImages.push({
+            previewUrl: state.endPreviewUrl,
+            name: fileName,
+            path: state.endFilePath,
+            file: fileObj
+          });
         } catch (err) {
           console.error('Не удалось восстановить end файл:', err);
+        }
+      }
+      
+      if (restoredImages.length > 0) {
+        setImages(restoredImages);
+      }
+      
+      if (state.taskId) {
+        const task = getTask(state.taskId);
+        if (task) {
+          if (task.status === 'running') {
+            setIsProcessing(true);
+          }
+          if (task.status === 'completed' && task.resultUrl) {
+            setResultUrl(task.resultUrl);
+            setIsProcessing(false);
+          }
+          if (task.status === 'failed') {
+            setError(task.error || 'Ошибка выполнения задачи');
+            setIsProcessing(false);
+          }
         }
       }
     };
@@ -165,22 +176,24 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
   // Сохраняем состояние
   useEffect(() => {
     if (tabId && restoredTabIdRef.current === tabId) {
+      const startImage = images[0];
+      const endImage = images[1];
       updateTabState(tabId, {
-        startFileName: startFile?.name || startFileNameRef.current,
-        endFileName: endFile?.name || endFileNameRef.current,
-        startFilePath: startFile?.path || startFilePathRef.current,
-        endFilePath: endFile?.path || endFilePathRef.current,
-        startPreviewUrl,
-        endPreviewUrl,
+        startFileName: startImage?.name || null,
+        endFileName: endImage?.name || null,
+        startFilePath: startImage?.path || null,
+        endFilePath: endImage?.path || null,
+        startPreviewUrl: startImage?.previewUrl || null,
+        endPreviewUrl: endImage?.previewUrl || null,
         resultUrl,
         durationSeconds,
         prompt,
         taskId: currentTaskIdRef.current
       });
     }
-  }, [startFile, endFile, startPreviewUrl, endPreviewUrl, resultUrl, durationSeconds, prompt, tabId, updateTabState]);
+  }, [images, resultUrl, durationSeconds, prompt, tabId, updateTabState]);
 
-  const handleFileSelect = useCallback(async (file, isStart) => {
+  const handleFileSelect = useCallback(async (file) => {
     if (!file) return;
 
     if (!file.type?.startsWith('image/')) {
@@ -196,33 +209,28 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       return;
     }
 
-    if (isStart) {
-      setStartFile(file);
-      startFileNameRef.current = file.name;
-      startFilePathRef.current = file.path;
-    } else {
-      setEndFile(file);
-      endFileNameRef.current = file.name;
-      endFilePathRef.current = file.path;
+    if (images.length >= 2) {
+      setError('Максимум 2 изображения. Удалите одно перед добавлением нового.');
+      return;
     }
-    
+
     setError(null);
-    if (isStart) {
-      setResultUrl(null);
-    }
+    setResultUrl(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      if (isStart) {
-        setStartPreviewUrl(e.target.result);
-      } else {
-        setEndPreviewUrl(e.target.result);
-      }
+      const newImage = {
+        previewUrl: e.target.result,
+        name: file.name,
+        path: file.path,
+        file: file
+      };
+      setImages(prev => [...prev, newImage]);
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [images.length]);
 
-  const handleDroppedFile = useCallback(async (path, isStart) => {
+  const handleDroppedFile = useCallback(async (path) => {
     try {
       const isDir = await invoke('check_path_is_directory', { path }).catch(() => false);
       if (isDir) {
@@ -243,143 +251,56 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       const fileObj = new File([blob], fileName, { type: mimeType });
       fileObj.path = path;
 
-      await handleFileSelect(fileObj, isStart);
+      await handleFileSelect(fileObj);
     } catch (err) {
       console.error('Ошибка обработки файла:', err);
       setError('Ошибка обработки файла: ' + (err.message || err));
     }
   }, [handleFileSelect]);
 
-  // Drag and drop через Tauri (только для активной вкладки)
-  // Используем один глобальный обработчик, но проверяем активность вкладки
-  useEffect(() => {
-    if (!isActive) return; // Не регистрируем обработчик для неактивных вкладок
-    
-    const appWindow = getCurrentWindow();
+  // Tauri drag and drop отключен в конфигурации для использования HTML5 API
 
-    if (typeof appWindow.onDragDropEvent === 'function') {
-      const unlisten = appWindow.onDragDropEvent((event) => {
-        // Проверяем, что эта вкладка все еще активна
-        if (!isActive) return;
-        
-        // Проверяем, что dropzone этой вкладки видим
-        const startDropzone = startDropzoneRef.current;
-        const endDropzone = endDropzoneRef.current;
-        if (!startDropzone && !endDropzone) return;
-        
-        // Проверяем, что родительский элемент (страница) активен
-        const pageElement = startDropzone?.closest('.page') || endDropzone?.closest('.page');
-        if (!pageElement || !pageElement.classList.contains('active')) return;
-        
-        if (event.payload.type === 'drop') {
-          setIsDragging(false);
-          const paths = event.payload.paths;
-          if (paths && Array.isArray(paths) && paths.length > 0) {
-            // Определяем, над каким dropzone был drop
-            // Используем draggedOverDropzone, который устанавливается через HTML5 drag events
-            let isStart;
-            if (draggedOverDropzone === 'start') {
-              isStart = true;
-            } else if (draggedOverDropzone === 'end') {
-              isStart = false;
-            } else {
-              // Если draggedOverDropzone не определен (Tauri drag из проводника),
-              // проверяем, над каким dropzone находится курсор в момент drop
-              // Используем document.elementFromPoint с координатами из события, если доступны
-              // Или проверяем, какой dropzone активен (имеет класс drag-over)
-              const startDropzoneEl = startDropzoneRef.current;
-              const endDropzoneEl = endDropzoneRef.current;
-              
-              // Проверяем, есть ли координаты в событии
-              if (event.payload.x !== undefined && event.payload.y !== undefined) {
-                const elementUnderCursor = document.elementFromPoint(event.payload.x, event.payload.y);
-                if (elementUnderCursor) {
-                  if (startDropzoneEl && startDropzoneEl.contains(elementUnderCursor)) {
-                    isStart = true;
-                  } else if (endDropzoneEl && endDropzoneEl.contains(elementUnderCursor)) {
-                    isStart = false;
-                  } else {
-                    // Fallback: проверяем, какой dropzone находится выше
-                    if (startDropzoneEl && endDropzoneEl) {
-                      const startRect = startDropzoneEl.getBoundingClientRect();
-                      const endRect = endDropzoneEl.getBoundingClientRect();
-                      isStart = startRect.top < endRect.top;
-                    } else {
-                      isStart = !startFile && !startFileNameRef.current;
-                    }
-                  }
-                } else {
-                  // Fallback: проверяем, какой dropzone находится выше
-                  if (startDropzoneEl && endDropzoneEl) {
-                    const startRect = startDropzoneEl.getBoundingClientRect();
-                    const endRect = endDropzoneEl.getBoundingClientRect();
-                    isStart = startRect.top < endRect.top;
-                  } else {
-                    isStart = !startFile && !startFileNameRef.current;
-                  }
-                }
-              } else {
-                // Если координаты недоступны, используем draggedOverDropzone из HTML5 событий
-                // или fallback логику
-                if (startDropzoneEl && endDropzoneEl) {
-                  const startRect = startDropzoneEl.getBoundingClientRect();
-                  const endRect = endDropzoneEl.getBoundingClientRect();
-                  isStart = startRect.top < endRect.top;
-                } else {
-                  isStart = !startFile && !startFileNameRef.current;
-                }
-              }
-            }
-            handleDroppedFile(paths[0], isStart);
-            setDraggedOverDropzone(null);
-          }
-        } else if (event.payload.type === 'hover') {
-          setIsDragging(true);
-        } else if (event.payload.type === 'cancel') {
-          setIsDragging(false);
-          setDraggedOverDropzone(null);
-        }
-      });
-
-      return () => {
-        unlisten?.then(fn => fn());
-      };
-    }
-  }, [handleDroppedFile, isActive, draggedOverDropzone, startFile]);
-
-  const handleDragOver = useCallback((e, isStart) => {
+  // HTML5 drag and drop
+  const handleDragOver = useCallback((e) => {
     if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
-    setDraggedOverDropzone(isStart ? 'start' : 'end');
   }, [isActive]);
 
   const handleDragLeave = useCallback((e) => {
     if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
-    const dropzone = e.currentTarget;
-    if (!dropzone.contains(e.relatedTarget)) {
+    if (!dropzoneRef.current?.contains(e.relatedTarget)) {
       setIsDragging(false);
-      setDraggedOverDropzone(null);
     }
   }, [isActive]);
 
-  const handleDrop = useCallback((e, isStart) => {
+  const handleDrop = useCallback(async (e) => {
     if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    setDraggedOverDropzone(null);
+
+    // Проверяем, не перетаскиваем ли мы изображение для изменения порядка
+    if (draggedImageIndex !== null) {
+      return; // Это перетаскивание для изменения порядка, не обрабатываем здесь
+    }
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      handleFileSelect(files[0], isStart);
+      // Обрабатываем все файлы, но максимум 2
+      for (let i = 0; i < Math.min(files.length, 2 - images.length); i++) {
+        await handleFileSelect(files[i]);
+      }
+      if (files.length > 2 - images.length) {
+        setError(`Загружено максимальное количество изображений (2). Остальные файлы проигнорированы.`);
+      }
     }
-  }, [handleFileSelect, isActive]);
+  }, [handleFileSelect, isActive, images.length, draggedImageIndex]);
 
-  const handleClick = useCallback(async (isStart) => {
+  const handleClick = useCallback(async () => {
     try {
       const path = await openFileDialog({
         filters: [{
@@ -389,7 +310,7 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       });
 
       if (path) {
-        await handleDroppedFile(path, isStart);
+        await handleDroppedFile(path);
       }
     } catch (err) {
       if (err !== 'User cancelled the dialog') {
@@ -399,19 +320,74 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
     }
   }, [handleDroppedFile]);
 
+  const handleRemoveImage = useCallback((index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setResultUrl(null);
+  }, []);
+
+  const handleImageDragStart = useCallback((e, index) => {
+    setDraggedImageIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.dropEffect = 'move';
+    // Устанавливаем пустые данные, чтобы браузер не пытался перетащить изображение
+    e.dataTransfer.setData('text/plain', '');
+  }, []);
+
+  const handleImageDragOver = useCallback((e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedImageIndex !== null && draggedImageIndex !== index) {
+      setDragOverIndex(index);
+    }
+  }, [draggedImageIndex]);
+
+  const handleImageDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Проверяем, что мы действительно покинули элемент
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverIndex(null);
+    }
+  }, []);
+
+  const handleImageDrop = useCallback((e, dropIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (draggedImageIndex === null || draggedImageIndex === dropIndex) {
+      setDraggedImageIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    setImages(prev => {
+      const newImages = [...prev];
+      const draggedImage = newImages[draggedImageIndex];
+      newImages.splice(draggedImageIndex, 1);
+      newImages.splice(dropIndex, 0, draggedImage);
+      return newImages;
+    });
+
+    setDraggedImageIndex(null);
+    setDragOverIndex(null);
+  }, [draggedImageIndex]);
+
+  const handleImageDragEnd = useCallback(() => {
+    setDraggedImageIndex(null);
+    setDragOverIndex(null);
+  }, []);
+
   const handleClear = useCallback(() => {
-    setStartFile(null);
-    setEndFile(null);
-    setStartPreviewUrl(null);
-    setEndPreviewUrl(null);
+    setImages([]);
     setResultUrl(null);
     setError(null);
     setIsProcessing(false);
     setDurationSeconds(3);
-    startFileNameRef.current = null;
-    endFileNameRef.current = null;
-    startFilePathRef.current = null;
-    endFilePathRef.current = null;
+    setPrompt('animate');
     currentTaskIdRef.current = null;
     if (tabId) {
       setTabState(tabId, {
@@ -419,26 +395,22 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
         endFileName: null,
         startFilePath: null,
         endFilePath: null,
-            startPreviewUrl: null,
-            endPreviewUrl: null,
-            resultUrl: null,
-            durationSeconds: 3,
-            prompt: 'animate',
-            taskId: null
-          });
-        }
-        setPrompt('animate');
-      }, [tabId, setTabState]);
+        startPreviewUrl: null,
+        endPreviewUrl: null,
+        resultUrl: null,
+        durationSeconds: 3,
+        prompt: 'animate',
+        taskId: null
+      });
+    }
+  }, [tabId, setTabState]);
 
-  // Конвертируем файл в base64 data URI с правильным MIME типом
+  // Конвертируем файл в base64 data URI
   const fileToDataUri = useCallback(async (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        // Используем правильный MIME тип для изображения
-        // FileReader.readAsDataURL уже создает правильный data URI с MIME типом
-        // Но мы можем использовать его напрямую или переформатировать
-        const dataUri = reader.result; // Уже содержит data:image/...;base64,...
+        const dataUri = reader.result;
         resolve(dataUri);
       };
       reader.onerror = reject;
@@ -447,13 +419,21 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (!startFile || !endFile) {
-      setError('Пожалуйста, выберите оба изображения (начальное и конечное)');
+    if (images.length < 2) {
+      setError('Пожалуйста, загрузите 2 изображения');
       return;
     }
 
     if (!prompt || prompt.trim() === '') {
       setError('Пожалуйста, введите описание перехода (prompt)');
+      return;
+    }
+
+    const startFile = images[0].file;
+    const endFile = images[1].file;
+
+    if (!startFile || !endFile) {
+      setError('Ошибка: файлы изображений не найдены');
       return;
     }
 
@@ -509,7 +489,6 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       // Вызываем Replicate API через Tauri команду (обход CORS)
       const result = await invoke('replicate_run', {
         request: {
-          //model: "lucataco/wan-2.2-first-last-frame:6e49cb82c7656ef0cd4a272f74eb7e0866edadf8a916149b1023fb21d2f74158",
           model: "lucataco/wan-2.2-first-last-frame:003fd8a38ff17cb6022c3117bb90f7403cb632062ba2b098710738d116847d57",
           input: {
             start_image: startImageDataUri,
@@ -581,7 +560,7 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
     } finally {
       setIsProcessing(false);
     }
-  }, [startFile, endFile, durationSeconds, prompt, addTask, updateTask, tabId, updateTabState, fileToDataUri]);
+  }, [images, durationSeconds, prompt, addTask, updateTask, tabId, updateTabState, fileToDataUri]);
 
   const handleDownload = useCallback(async () => {
     if (!resultUrl) return;
@@ -628,106 +607,114 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
 
           <div className="tool-content">
             <div className="image-selector">
-              <div className="image-selector-row">
-                <div className="image-selector-item">
-                  <label>Начальное изображение</label>
-                  <div
-                    ref={startDropzoneRef}
-                    className={`selected-folder ${startFile || startFileNameRef.current ? 'has-folder' : ''} ${isDragging && isActive ? 'drag-over' : ''}`}
-                    onClick={isActive ? () => handleClick(true) : undefined}
-                    onDragOver={isActive ? (e) => handleDragOver(e, true) : undefined}
-                    onDragLeave={isActive ? handleDragLeave : undefined}
-                    onDrop={isActive ? (e) => handleDrop(e, true) : undefined}
-                    data-dropzone="true"
-                    data-tab-id={tabId}
-                  >
-                    {(startFile || startFileNameRef.current) ? (
-                      <>
-                        <span className="folder-path">{startFile?.name || startFileNameRef.current}</span>
-                        <button
-                          className="clear-folder-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setStartFile(null);
-                            setStartPreviewUrl(null);
-                            startFileNameRef.current = null;
-                            startFilePathRef.current = null;
-                          }}
-                          title="Очистить"
-                        >
-                          ✕
-                        </button>
-                      </>
-                    ) : (
-                      <div className="dropzone-placeholder">
-                        Перетащите начальное изображение или кликните для выбора
-                      </div>
-                    )}
+              <div
+                ref={dropzoneRef}
+                className={`selected-folder ${images.length > 0 ? 'has-folder' : ''} ${isDragging && isActive ? 'drag-over' : ''}`}
+                onClick={isActive ? handleClick : undefined}
+                onDragOver={isActive ? handleDragOver : undefined}
+                onDragLeave={isActive ? handleDragLeave : undefined}
+                onDrop={isActive ? handleDrop : undefined}
+                data-dropzone="true"
+                data-tab-id={tabId}
+              >
+                {images.length > 0 ? (
+                  <div className="dropzone-placeholder">
+                    Загрузить еще изображение (максимум 2)
                   </div>
-                </div>
-
-                <div className="image-selector-item">
-                  <label>Конечное изображение</label>
-                  <div
-                    ref={endDropzoneRef}
-                    className={`selected-folder ${endFile || endFileNameRef.current ? 'has-folder' : ''} ${isDragging && isActive ? 'drag-over' : ''}`}
-                    onClick={isActive ? () => handleClick(false) : undefined}
-                    onDragOver={isActive ? (e) => handleDragOver(e, false) : undefined}
-                    onDragLeave={isActive ? handleDragLeave : undefined}
-                    onDrop={isActive ? (e) => handleDrop(e, false) : undefined}
-                    data-dropzone="true"
-                    data-tab-id={tabId}
-                  >
-                    {(endFile || endFileNameRef.current) ? (
-                      <>
-                        <span className="folder-path">{endFile?.name || endFileNameRef.current}</span>
-                        <button
-                          className="clear-folder-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEndFile(null);
-                            setEndPreviewUrl(null);
-                            endFileNameRef.current = null;
-                            endFilePathRef.current = null;
-                          }}
-                          title="Очистить"
-                        >
-                          ✕
-                        </button>
-                      </>
-                    ) : (
-                      <div className="dropzone-placeholder">
-                        Перетащите конечное изображение или кликните для выбора
-                      </div>
-                    )}
+                ) : (
+                  <div className="dropzone-placeholder">
+                    Перетащите изображения сюда или кликните для выбора (максимум 2)
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {(startPreviewUrl || endPreviewUrl) && (
-              <div className="preview-section">
-                <h3>Исходные изображения</h3>
-                <div className="image-preview-container" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                  {startPreviewUrl && (
-                    <div>
-                      <h4>Начальное</h4>
-                      <img src={startPreviewUrl} alt="Start Preview" style={{ maxWidth: '300px', maxHeight: '300px' }} />
-                      <p className="file-name">{startFile?.name || startFileNameRef.current}</p>
+            {images.length > 0 && (
+              <div className="images-list" style={{ marginTop: '20px' }}>
+                <h3 style={{ marginBottom: '15px' }}>Загруженные изображения:</h3>
+                <div 
+                  style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}
+                  onDragOver={(e) => {
+                    // Если перетаскиваем файл извне, не обрабатываем здесь
+                    if (draggedImageIndex === null && e.dataTransfer.types.includes('Files')) {
+                      return;
+                    }
+                    // Если перетаскиваем изображение для изменения порядка, предотвращаем всплытие
+                    if (draggedImageIndex !== null) {
+                      e.stopPropagation();
+                    }
+                  }}
+                >
+                  {images.map((image, index) => (
+                    <div
+                      key={index}
+                      draggable={true}
+                      onDragStart={(e) => handleImageDragStart(e, index)}
+                      onDragOver={(e) => handleImageDragOver(e, index)}
+                      onDragLeave={handleImageDragLeave}
+                      onDrop={(e) => handleImageDrop(e, index)}
+                      onDragEnd={handleImageDragEnd}
+                      style={{
+                        position: 'relative',
+                        border: draggedImageIndex === index ? '2px solid var(--accent)' : dragOverIndex === index ? '2px dashed var(--accent)' : '2px solid var(--border)',
+                        borderRadius: '8px',
+                        padding: '10px',
+                        backgroundColor: dragOverIndex === index ? 'rgba(74, 158, 255, 0.1)' : 'var(--bg-tertiary)',
+                        cursor: 'move',
+                        opacity: draggedImageIndex === index ? 0.5 : 1,
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ position: 'relative' }}>
+                        <img 
+                          src={image.previewUrl} 
+                          alt={`Frame ${index + 1}`}
+                          draggable={false}
+                          style={{ maxWidth: '200px', maxHeight: '200px', display: 'block', pointerEvents: 'none' }}
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveImage(index);
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          style={{
+                            position: 'absolute',
+                            top: '5px',
+                            right: '5px',
+                            background: 'rgba(255, 0, 0, 0.8)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            lineHeight: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            pointerEvents: 'auto',
+                            zIndex: 10
+                          }}
+                          title="Удалить"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p style={{ marginTop: '8px', fontSize: '12px', textAlign: 'center', fontWeight: '500' }}>
+                        {index === 0 ? 'Start Frame' : 'End Frame'}
+                      </p>
+                      <p style={{ marginTop: '4px', fontSize: '11px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        {image.name}
+                      </p>
                     </div>
-                  )}
-                  {endPreviewUrl && (
-                    <div>
-                      <h4>Конечное</h4>
-                      <img src={endPreviewUrl} alt="End Preview" style={{ maxWidth: '300px', maxHeight: '300px' }} />
-                      <p className="file-name">{endFile?.name || endFileNameRef.current}</p>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
             )}
 
-            {(startFile || endFile) && (
+            {images.length >= 2 && (
               <>
                 <div className="settings-control" style={{ marginTop: '20px', marginBottom: '20px' }}>
                   <label htmlFor="prompt-input" style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
@@ -740,7 +727,8 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={isProcessing}
                     placeholder="Например: animate, smooth transition, fade"
-                    style={{ width: '100%', maxWidth: '500px', padding: '8px', fontSize: '14px' }}
+                    className="form-input"
+                    style={{ width: '100%', maxWidth: '500px' }}
                   />
                 </div>
 
@@ -759,7 +747,7 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
                     disabled={isProcessing}
                     style={{ width: '100%', maxWidth: '500px' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85em', color: '#666', marginTop: '5px', maxWidth: '500px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85em', color: 'var(--text-secondary)', marginTop: '5px', maxWidth: '500px' }}>
                     <span>0.5 сек</span>
                     <span>10 сек</span>
                   </div>
@@ -767,11 +755,11 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
               </>
             )}
 
-            {!resultUrl && (
+            {!resultUrl && images.length >= 2 && (
               <button
                 id="generateVideoBtn"
                 className="btn btn-success"
-                disabled={!startFile || !endFile || !prompt || prompt.trim() === '' || isProcessing}
+                disabled={!prompt || prompt.trim() === '' || isProcessing}
                 onClick={handleGenerate}
               >
                 🎬 Сгенерировать видео

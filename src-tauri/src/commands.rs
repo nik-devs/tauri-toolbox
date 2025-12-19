@@ -84,6 +84,37 @@ fn convert_single_file(webp_path: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn convert_single_webp_to_png(file_path: String) -> Result<String, String> {
+    let path = Path::new(&file_path);
+    
+    if !path.exists() {
+        return Err("Файл не существует".to_string());
+    }
+    
+    if !path.is_file() {
+        return Err("Указанный путь не является файлом".to_string());
+    }
+    
+    // Проверяем расширение
+    if let Some(ext) = path.extension() {
+        if !ext.eq_ignore_ascii_case("webp") {
+            return Err("Файл не является WebP изображением".to_string());
+        }
+    } else {
+        return Err("Файл не имеет расширения".to_string());
+    }
+    
+    // Конвертируем файл
+    convert_single_file(path)?;
+    
+    // Возвращаем путь к созданному PNG файлу
+    let mut png_path = path.to_path_buf();
+    png_path.set_extension("png");
+    
+    Ok(png_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn delete_webp_files(folder_path: String) -> Result<usize, String> {
     let path = Path::new(&folder_path);
     

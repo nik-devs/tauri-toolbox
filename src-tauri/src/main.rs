@@ -14,6 +14,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::convert_webp_to_png,
+            commands::convert_single_webp_to_png,
             commands::delete_webp_files,
             commands::save_settings,
             commands::load_settings,
