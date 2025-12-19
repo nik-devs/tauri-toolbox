@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
+import { showNotification } from '../../utils/notifications';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const MAX_IMAGES = 10; // Максимум изображений
@@ -520,7 +521,7 @@ export default function QwenEditPlus({ tabId = `qwen-edit-plus-${Date.now()}`, i
         // Сохраняем файл
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
-        alert('Изображение успешно сохранено!');
+        showNotification('Изображение успешно сохранено!', 'success');
       }
     } catch (err) {
       console.error('Ошибка скачивания:', err);

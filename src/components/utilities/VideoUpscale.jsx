@@ -496,7 +496,7 @@ export default function VideoUpscale({ tabId = `video-upscale-${Date.now()}`, is
         // Сохраняем файл
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
-        alert('Видео успешно сохранено!');
+        showNotification('Видео успешно сохранено!', 'success');
       }
     } catch (err) {
       console.error('Ошибка скачивания:', err);

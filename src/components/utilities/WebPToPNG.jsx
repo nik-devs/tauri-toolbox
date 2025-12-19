@@ -7,6 +7,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { tempDir } from '@tauri-apps/api/path';
 import { generateTimestamp } from '../../utils/fileUtils';
+import { showNotification } from '../../utils/notifications';
 
 export default function WebPToPNG() {
   const { handleBackToTools } = useApp();
@@ -288,7 +289,7 @@ export default function WebPToPNG() {
       if (filePath) {
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
-        alert('Файл успешно сохранен!');
+        showNotification('Файл успешно сохранен!', 'success');
       }
     } catch (err) {
       if (err !== 'User cancelled the dialog') {

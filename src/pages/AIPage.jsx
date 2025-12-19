@@ -45,6 +45,12 @@ export default function AIPage() {
       icon: '🎭',
       title: 'Image To Pose',
       description: 'Генерация позы из изображения с помощью AI'
+    },
+    {
+      id: 'style-transfer',
+      icon: '🎨',
+      title: 'Style Transfer',
+      description: 'Стилизация картинки с помощью AI'
     }
   ];
 

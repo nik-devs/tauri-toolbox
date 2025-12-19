@@ -4,30 +4,17 @@ import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { showNotification } from '../utils/notifications';
 
 const API_KEYS = {
   FAL: 'apiKeyFAL',
   Replicate: 'apiKeyReplicate',
   HF: 'apiKeyHF',
   GPT: 'apiKeyGPT',
-  Grok: 'apiKeyGrok'
+  Grok: 'apiKeyGrok',
+  RunPod: 'apiKeyRunPod',
+  RunPodEndpoint: 'apiEndpointRunPod'
 };
-
-function showNotification(message, type = 'info') {
-  const notification = document.createElement('div');
-  notification.className = `notification notification-${type}`;
-  notification.textContent = message;
-  document.body.appendChild(notification);
-
-  setTimeout(() => {
-    notification.classList.add('show');
-  }, 10);
-
-  setTimeout(() => {
-    notification.classList.remove('show');
-    setTimeout(() => notification.remove(), 300);
-  }, 3000);
-}
 
 export default function SettingsPage() {
   const [apiKeys, setApiKeys] = useState({
@@ -35,7 +22,9 @@ export default function SettingsPage() {
     Replicate: '',
     HF: '',
     GPT: '',
-    Grok: ''
+    Grok: '',
+    RunPod: '',
+    RunPodEndpoint: ''
   });
   const [appVersion, setAppVersion] = useState('Загрузка...');
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
@@ -226,10 +215,10 @@ export default function SettingsPage() {
               <div key={key} className="form-group">
                 <label htmlFor={API_KEYS[key]}>{key}</label>
                 <input
-                  type="password"
+                  type={key === 'RunPodEndpoint' ? 'text' : 'password'}
                   id={API_KEYS[key]}
                   className="form-input"
-                  placeholder={`Введите ключ ${key}`}
+                  placeholder={key === 'RunPodEndpoint' ? 'Введите эндпоинт RunPod' : `Введите ключ ${key}`}
                   value={apiKeys[key] || ''}
                   onChange={(e) => handleKeyChange(key, e.target.value)}
                   autoComplete="new-password"

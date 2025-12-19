@@ -164,6 +164,10 @@ pub struct ApiKeys {
     pub gpt: Option<String>,
     #[serde(rename = "Grok")]
     pub grok: Option<String>,
+    #[serde(rename = "RunPod")]
+    pub runpod: Option<String>,
+    #[serde(rename = "RunPodEndpoint")]
+    pub runpod_endpoint: Option<String>,
 }
 
 fn get_settings_path() -> Result<PathBuf, String> {

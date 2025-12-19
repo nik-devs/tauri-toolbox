@@ -6,8 +6,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
+import { showNotification } from '../../utils/notifications';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 16 * 1024 * 1024; // 16MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
 const MIME_TYPES = {
   '.jpg': 'image/jpeg',
@@ -478,7 +479,7 @@ export default function ImageToPose({ tabId = `image-to-pose-${Date.now()}`, isA
         // Сохраняем файл
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
-        alert('Изображение успешно сохранено!');
+        showNotification('Изображение успешно сохранено!', 'success');
       }
     } catch (err) {
       console.error('Ошибка скачивания:', err);

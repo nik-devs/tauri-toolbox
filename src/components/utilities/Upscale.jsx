@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
+import { showNotification } from '../../utils/notifications';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -456,7 +457,7 @@ export default function Upscale({ tabId = `upscale-${Date.now()}`, isActive = tr
         // Сохраняем файл
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
-        alert('Изображение успешно сохранено!');
+        showNotification('Изображение успешно сохранено!', 'success');
       }
     } catch (err) {
       console.error('Ошибка скачивания:', err);

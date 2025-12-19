@@ -15,7 +15,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleOpenUtility = useCallback((utilityId) => {
-    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video' || utilityId === 'video-upscale' || utilityId === 'camera-control' || utilityId === 'qwen-edit-plus' || utilityId === 'image-to-pose';
+    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video' || utilityId === 'video-upscale' || utilityId === 'camera-control' || utilityId === 'qwen-edit-plus' || utilityId === 'image-to-pose' || utilityId === 'style-transfer';
     
     if (isAiUtility) {
       // Для AI утилит создаем вкладку
@@ -28,6 +28,7 @@ export function AppProvider({ children }) {
         if (id === 'camera-control') return 'Camera Control';
         if (id === 'qwen-edit-plus') return 'Qwen Edit Plus';
         if (id === 'image-to-pose') return 'Image To Pose';
+        if (id === 'style-transfer') return 'Style Transfer';
         return id;
       };
       const tab = {
