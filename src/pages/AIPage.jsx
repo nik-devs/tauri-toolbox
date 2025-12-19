@@ -21,6 +21,12 @@ export default function AIPage() {
       icon: '🎬',
       title: 'Frame To Frame Video',
       description: 'Генерация плавного видео-перехода между двумя изображениями'
+    },
+    {
+      id: 'video-upscale',
+      icon: '📹',
+      title: 'Video Upscale',
+      description: 'Увеличение разрешения и FPS видео с помощью AI'
     }
   ];
 

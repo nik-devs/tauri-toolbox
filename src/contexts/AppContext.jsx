@@ -15,7 +15,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleOpenUtility = useCallback((utilityId) => {
-    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video';
+    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video' || utilityId === 'video-upscale';
     
     if (isAiUtility) {
       // Для AI утилит создаем вкладку
@@ -24,6 +24,7 @@ export function AppProvider({ children }) {
         if (id === 'upscale') return 'Upscale';
         if (id === 'remove-background') return 'Remove Background';
         if (id === 'frame-to-frame-video') return 'Frame To Frame Video';
+        if (id === 'video-upscale') return 'Video Upscale';
         return id;
       };
       const tab = {
