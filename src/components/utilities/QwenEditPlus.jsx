@@ -2,11 +2,13 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, openFileDialog } from '../../hooks/useTauri';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_IMAGES = 10; // Максимум изображений
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
 const MIME_TYPES = {
   '.jpg': 'image/jpeg',
@@ -17,33 +19,24 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
-export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()}`, isActive = true }) {
+const ASPECT_RATIO_OPTIONS = [
+  { value: 'match_input_image', label: 'Соответствует входному изображению' },
+  { value: '1:1', label: '1:1 (Квадрат)' },
+  { value: '16:9', label: '16:9 (Широкий)' },
+  { value: '9:16', label: '9:16 (Вертикальный)' }
+];
+
+export default function QwenEditPlus({ tabId = `qwen-edit-plus-${Date.now()}`, isActive = true }) {
   const { getTabState, updateTabState, setTabState } = useTabsState();
   const { addTask, updateTask } = useTasks();
-  
   const { getTask } = useTasks();
   
-  // Получаем состояние для этой конкретной вкладки
   const savedState = getTabState(tabId);
   
-  // Инициализируем состояние из сохраненных данных
   const [images, setImages] = useState(() => {
     const savedImages = [];
-    if (savedState?.startPreviewUrl) {
-      savedImages.push({
-        previewUrl: savedState.startPreviewUrl,
-        name: savedState.startFileName || 'start.jpg',
-        path: savedState.startFilePath,
-        file: null
-      });
-    }
-    if (savedState?.endPreviewUrl) {
-      savedImages.push({
-        previewUrl: savedState.endPreviewUrl,
-        name: savedState.endFileName || 'end.jpg',
-        path: savedState.endFilePath,
-        file: null
-      });
+    if (savedState?.images) {
+      savedImages.push(...savedState.images);
     }
     return savedImages;
   });
@@ -53,8 +46,8 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
   const [isDragging, setIsDragging] = useState(false);
   const [draggedImageIndex, setDraggedImageIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
-  const [durationSeconds, setDurationSeconds] = useState(savedState?.durationSeconds ?? 3);
-  const [prompt, setPrompt] = useState(savedState?.prompt ?? 'animate');
+  const [prompt, setPrompt] = useState(savedState?.prompt ?? '');
+  const [aspectRatio, setAspectRatio] = useState(savedState?.aspectRatio ?? 'match_input_image');
   const dropzoneRef = useRef(null);
   const currentTaskIdRef = useRef(savedState?.taskId || null);
   const restoredTabIdRef = useRef(null);
@@ -74,125 +67,79 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       if (state.taskId) {
         currentTaskIdRef.current = state.taskId;
       }
-      if (state.durationSeconds !== undefined) {
-        setDurationSeconds(state.durationSeconds);
-      }
-      if (state.prompt) {
+      if (state.prompt !== undefined) {
         setPrompt(state.prompt);
+      }
+      if (state.aspectRatio) {
+        setAspectRatio(state.aspectRatio);
       }
       
       // Восстанавливаем файлы
-      const restoredImages = [];
-      if (state.startFilePath && state.startPreviewUrl) {
-        try {
-          const fileData = await readFile(state.startFilePath);
-          const fileName = state.startFileName || state.startFilePath.split(/[/\\]/).pop();
-          const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
-          const mimeType = MIME_TYPES[ext] || 'image/png';
-          
-          const blob = new Blob([fileData], { type: mimeType });
-          const fileObj = new File([blob], fileName, { type: mimeType });
-          fileObj.path = state.startFilePath;
-          
-          restoredImages.push({
-            previewUrl: state.startPreviewUrl,
-            name: fileName,
-            path: state.startFilePath,
-            file: fileObj
-          });
-        } catch (err) {
-          console.error('Не удалось восстановить start файл:', err);
+      if (state.images && state.images.length > 0) {
+        const restoredImages = [];
+        for (const imgState of state.images) {
+          if (imgState.path && imgState.previewUrl) {
+            try {
+              const fileData = await readFile(imgState.path);
+              const fileName = imgState.name || imgState.path.split(/[/\\]/).pop();
+              const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+              const mimeType = MIME_TYPES[ext] || 'image/png';
+              
+              const blob = new Blob([fileData], { type: mimeType });
+              const fileObj = new File([blob], fileName, { type: mimeType });
+              fileObj.path = imgState.path;
+              
+              restoredImages.push({
+                previewUrl: imgState.previewUrl,
+                name: fileName,
+                path: imgState.path,
+                file: fileObj
+              });
+            } catch (err) {
+              console.error('Ошибка восстановления файла:', err);
+            }
+          }
         }
-      }
-      
-      if (state.endFilePath && state.endPreviewUrl) {
-        try {
-          const fileData = await readFile(state.endFilePath);
-          const fileName = state.endFileName || state.endFilePath.split(/[/\\]/).pop();
-          const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
-          const mimeType = MIME_TYPES[ext] || 'image/png';
-          
-          const blob = new Blob([fileData], { type: mimeType });
-          const fileObj = new File([blob], fileName, { type: mimeType });
-          fileObj.path = state.endFilePath;
-          
-          restoredImages.push({
-            previewUrl: state.endPreviewUrl,
-            name: fileName,
-            path: state.endFilePath,
-            file: fileObj
-          });
-        } catch (err) {
-          console.error('Не удалось восстановить end файл:', err);
-        }
-      }
-      
-      if (restoredImages.length > 0) {
         setImages(restoredImages);
-      }
-      
-      if (state.taskId) {
-        const task = getTask(state.taskId);
-        if (task) {
-          if (task.status === 'running') {
-            setIsProcessing(true);
-          }
-          if (task.status === 'completed' && task.resultUrl) {
-            setResultUrl(task.resultUrl);
-            setIsProcessing(false);
-          }
-          if (task.status === 'failed') {
-            setError(task.error || 'Ошибка выполнения задачи');
-            setIsProcessing(false);
-          }
-        }
       }
     };
     
     restoreState();
-  }, [tabId, getTabState, getTask]);
+  }, [tabId, getTabState]);
 
-  // Подписываемся на изменения задачи
-  const { tasks } = useTasks();
+  // Сохраняем состояние при изменении
   useEffect(() => {
-    if (!currentTaskIdRef.current) return;
+    if (!tabId) return;
     
-    const task = tasks.find(t => t.id === currentTaskIdRef.current);
-    if (!task) return;
+    const imagesToSave = images.map(img => ({
+      previewUrl: img.previewUrl,
+      name: img.name,
+      path: img.path
+    }));
     
-    if (task.status === 'running' && !isProcessing) {
-      setIsProcessing(true);
-    } else if (task.status === 'completed' && task.resultUrl && resultUrl !== task.resultUrl) {
-      setResultUrl(task.resultUrl);
-      setIsProcessing(false);
-      updateTabState(tabId, { resultUrl: task.resultUrl });
-    } else if (task.status === 'failed' && !error) {
-      setError(task.error || 'Ошибка выполнения задачи');
-      setIsProcessing(false);
-    } else if (task.status !== 'running' && isProcessing) {
-      setIsProcessing(false);
-    }
-  }, [tasks, isProcessing, resultUrl, error, tabId, updateTabState]);
+    updateTabState(tabId, {
+      images: imagesToSave,
+      prompt,
+      aspectRatio,
+      resultUrl,
+      taskId: currentTaskIdRef.current
+    });
+  }, [images, prompt, aspectRatio, resultUrl, tabId, updateTabState]);
 
-  // Сохраняем состояние
+  // Игнорируем Tauri drag and drop для файлов (используем HTML5)
   useEffect(() => {
-    if (tabId && restoredTabIdRef.current === tabId) {
-      const startImage = images[0];
-      const endImage = images[1];
-      updateTabState(tabId, {
-        startFileName: startImage?.name || null,
-        endFileName: endImage?.name || null,
-        startFilePath: startImage?.path || null,
-        endFilePath: endImage?.path || null,
-        startPreviewUrl: startImage?.previewUrl || null,
-        endPreviewUrl: endImage?.previewUrl || null,
-        resultUrl,
-        durationSeconds,
-        prompt,
-        taskId: currentTaskIdRef.current
-      });
-    }
-  }, [images, resultUrl, durationSeconds, prompt, tabId, updateTabState]);
+    if (!isActive) return;
+    
+    const window = getCurrentWindow();
+    const unlisten = window.onDragDropEvent((event) => {
+      // Игнорируем события Tauri для этого компонента
+      // HTML5 drag and drop будет обрабатывать файлы
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [isActive]);
 
   const handleFileSelect = useCallback(async (file) => {
     if (!file) return;
@@ -210,8 +157,8 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       return;
     }
 
-    if (images.length >= 2) {
-      setError('Максимум 2 изображения. Удалите одно перед добавлением нового.');
+    if (images.length >= MAX_IMAGES) {
+      setError(`Максимум ${MAX_IMAGES} изображений. Удалите одно перед добавлением нового.`);
       return;
     }
 
@@ -259,8 +206,6 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
     }
   }, [handleFileSelect]);
 
-  // Tauri drag and drop отключен в конфигурации для использования HTML5 API
-
   // HTML5 drag and drop
   const handleDragOver = useCallback((e) => {
     if (!isActive) return;
@@ -291,27 +236,33 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      // Обрабатываем все файлы, но максимум 2
-      for (let i = 0; i < Math.min(files.length, 2 - images.length); i++) {
+      // Обрабатываем все файлы, но максимум MAX_IMAGES
+      for (let i = 0; i < Math.min(files.length, MAX_IMAGES - images.length); i++) {
         await handleFileSelect(files[i]);
       }
-      if (files.length > 2 - images.length) {
-        setError(`Загружено максимальное количество изображений (2). Остальные файлы проигнорированы.`);
+      if (files.length > MAX_IMAGES - images.length) {
+        setError(`Загружено максимальное количество изображений (${MAX_IMAGES}). Остальные файлы проигнорированы.`);
       }
     }
   }, [handleFileSelect, isActive, images.length, draggedImageIndex]);
 
   const handleClick = useCallback(async () => {
     try {
-      const path = await openFileDialog({
+      const paths = await openFileDialog({
         filters: [{
           name: 'Images',
           extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
-        }]
+        }],
+        multiple: true
       });
 
-      if (path) {
-        await handleDroppedFile(path);
+      if (paths && paths.length > 0) {
+        for (let i = 0; i < Math.min(paths.length, MAX_IMAGES - images.length); i++) {
+          await handleDroppedFile(paths[i]);
+        }
+        if (paths.length > MAX_IMAGES - images.length) {
+          setError(`Загружено максимальное количество изображений (${MAX_IMAGES}). Остальные файлы проигнорированы.`);
+        }
       }
     } catch (err) {
       if (err !== 'User cancelled the dialog') {
@@ -319,7 +270,7 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
         setError('Ошибка выбора файла: ' + (err.message || err));
       }
     }
-  }, [handleDroppedFile]);
+  }, [handleDroppedFile, images.length]);
 
   const handleRemoveImage = useCallback((index) => {
     setImages(prev => prev.filter((_, i) => i !== index));
@@ -387,20 +338,15 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
     setResultUrl(null);
     setError(null);
     setIsProcessing(false);
-    setDurationSeconds(3);
-    setPrompt('animate');
+    setPrompt('');
+    setAspectRatio('match_input_image');
     currentTaskIdRef.current = null;
     if (tabId) {
       setTabState(tabId, {
-        startFileName: null,
-        endFileName: null,
-        startFilePath: null,
-        endFilePath: null,
-        startPreviewUrl: null,
-        endPreviewUrl: null,
+        images: [],
+        prompt: '',
+        aspectRatio: 'match_input_image',
         resultUrl: null,
-        durationSeconds: 3,
-        prompt: 'animate',
         taskId: null
       });
     }
@@ -420,20 +366,19 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (images.length < 2) {
-      setError('Пожалуйста, загрузите 2 изображения');
+    if (images.length === 0) {
+      setError('Пожалуйста, загрузите хотя бы одно изображение');
       return;
     }
 
     if (!prompt || prompt.trim() === '') {
-      setError('Пожалуйста, введите описание перехода (prompt)');
+      setError('Пожалуйста, введите промпт');
       return;
     }
 
-    const startFile = images[0].file;
-    const endFile = images[1].file;
+    const imageFiles = images.map(img => img.file).filter(Boolean);
 
-    if (!startFile || !endFile) {
+    if (imageFiles.length === 0) {
       setError('Ошибка: файлы изображений не найдены');
       return;
     }
@@ -455,9 +400,9 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
 
     // Создаем задачу
     const taskId = addTask({
-      type: 'frame-to-frame-video',
-      title: `Frame To Frame: ${startFile.name} → ${endFile.name}`,
-      description: `Генерация видео между изображениями`,
+      type: 'qwen-edit-plus',
+      title: 'Qwen Edit Plus',
+      description: 'Редактирование изображений с помощью Qwen Edit Plus',
       status: 'running',
       progress: 0,
       tabId: tabId
@@ -470,38 +415,26 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
     setResultUrl(null);
 
     try {
-      // Проверяем размеры файлов
-      if (startFile.size > MAX_FILE_SIZE) {
-        throw new Error(`Начальное изображение слишком большое. Максимальный размер: 20MB. Ваш файл: ${(startFile.size / 1024 / 1024).toFixed(2)}MB`);
-      }
-
-      if (endFile.size > MAX_FILE_SIZE) {
-        throw new Error(`Конечное изображение слишком большое. Максимальный размер: 20MB. Ваш файл: ${(endFile.size / 1024 / 1024).toFixed(2)}MB`);
-      }
 
       updateTask(taskId, { progress: 10, status: 'running' });
 
-      // Конвертируем файлы в base64 data URI
-      const startImageDataUri = await fileToDataUri(startFile);
-      const endImageDataUri = await fileToDataUri(endFile);
+      // Конвертируем все файлы в base64 data URI
+      const imageDataUris = await Promise.all(imageFiles.map(file => fileToDataUri(file)));
       
       updateTask(taskId, { progress: 30, status: 'running' });
 
       // Вызываем Replicate API через Tauri команду (обход CORS)
       const result = await invoke('replicate_run', {
         request: {
-          model: "lucataco/wan-2.2-first-last-frame:003fd8a38ff17cb6022c3117bb90f7403cb632062ba2b098710738d116847d57",
+          model: "qwen/qwen-image-edit-plus",
           input: {
-            start_image: startImageDataUri,
-            end_image: endImageDataUri,
+            image: imageDataUris,
             prompt: prompt.trim(),
-            negative_prompt: "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走,过曝，",
-            duration_seconds: durationSeconds,
-            num_inference_steps: 8,
-            guidance_scale: 1,
-            guidance_scale_2: 1,
-            shift: 8,
-            seed: 0
+            go_fast: true,
+            aspect_ratio: aspectRatio,
+            output_format: "png",
+            output_quality: 95,
+            disable_safety_checker: true
           },
           api_key: replicateKey
         }
@@ -512,34 +445,34 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       // Получаем output из результата
       const output = result.output;
 
-      // Replicate возвращает URL видео (может быть строкой или массивом)
-      let videoUrl;
+      // Replicate возвращает URL изображения (может быть строкой или массивом)
+      let imageUrl;
       if (Array.isArray(output)) {
-        videoUrl = output[0];
+        imageUrl = output[0];
       } else if (typeof output === 'string') {
-        videoUrl = output;
+        imageUrl = output;
       } else if (output && typeof output === 'object' && output.url) {
-        videoUrl = output.url;
+        imageUrl = output.url;
       } else {
         throw new Error('Неожиданный формат ответа от Replicate API');
       }
       
-      if (!videoUrl) {
-        throw new Error('Не удалось получить URL видео из ответа API');
+      if (!imageUrl) {
+        throw new Error('Не удалось получить URL изображения из ответа API');
       }
       
-      setResultUrl(videoUrl);
+      setResultUrl(imageUrl);
       
       updateTask(taskId, { 
         progress: 100, 
         status: 'completed',
-        resultUrl: videoUrl
+        resultUrl: imageUrl
       });
       
-      updateTabState(tabId, { resultUrl: videoUrl });
+      updateTabState(tabId, { resultUrl: imageUrl });
     } catch (err) {
-      console.error('Ошибка генерации видео:', err);
-      let errorMessage = err.message || 'Ошибка при генерации видео';
+      console.error('Ошибка генерации:', err);
+      let errorMessage = err.message || 'Ошибка при генерации изображения';
 
       // Обработка различных форматов ошибок Replicate
       if (err.response?.data?.detail) {
@@ -554,20 +487,22 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       }
 
       setError(errorMessage);
-      updateTask(taskId, { 
-        status: 'failed',
-        error: errorMessage
-      });
+      if (currentTaskIdRef.current) {
+        updateTask(currentTaskIdRef.current, { 
+          status: 'failed',
+          error: errorMessage
+        });
+      }
     } finally {
       setIsProcessing(false);
     }
-  }, [images, durationSeconds, prompt, addTask, updateTask, tabId, updateTabState, fileToDataUri]);
+  }, [images, prompt, aspectRatio, addTask, updateTask, tabId, updateTabState, fileToDataUri]);
 
   const handleDownload = useCallback(async () => {
     if (!resultUrl) return;
 
     try {
-      // Скачиваем видео
+      // Скачиваем изображение
       const response = await fetch(resultUrl);
       const blob = await response.blob();
 
@@ -575,36 +510,46 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
       // Используем Tauri dialog для сохранения
       const filePath = await save({
         filters: [{
-          name: 'Videos',
-          extensions: ['mp4']
+          name: 'Images',
+          extensions: ['png']
         }],
-        defaultPath: `frame-to-frame-video-${timestamp}.mp4`
+        defaultPath: `qwen-edit-plus-result-${timestamp}.png`
       });
 
       if (filePath) {
         // Сохраняем файл
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
-        alert('Видео успешно сохранено!');
+        alert('Изображение успешно сохранено!');
       }
     } catch (err) {
       console.error('Ошибка скачивания:', err);
-      setError('Ошибка при сохранении видео: ' + (err.message || err));
+      setError('Ошибка при сохранении изображения: ' + (err.message || err));
     }
   }, [resultUrl]);
 
+  // Автоматическое изменение размера textarea
+  const textareaRef = useRef(null);
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [prompt]);
+
   return (
     <div 
-      id={`page-utility-frame-to-frame-${tabId}`} 
+      id={`page-utility-qwen-edit-plus-${tabId}`} 
       className={`page utility-page ${isActive ? 'active' : ''}`}
     >
       <div className="utility-header">
-        <h2>Frame To Frame Video</h2>
+        <h2>Qwen Edit Plus</h2>
       </div>
       <div className="utility-content">
         <div className="tool-card">
           <p className="tool-description">
-            Генерация плавного видео-перехода между двумя изображениями с помощью AI
+            Редактирование изображений с помощью AI модели Qwen Edit Plus
           </p>
 
           <div className="tool-content">
@@ -621,11 +566,11 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
               >
                 {images.length > 0 ? (
                   <div className="dropzone-placeholder">
-                    Загрузить еще изображение (максимум 2)
+                    Загрузить еще изображение (максимум {MAX_IMAGES})
                   </div>
                 ) : (
                   <div className="dropzone-placeholder">
-                    Перетащите изображения сюда или кликните для выбора (максимум 2)
+                    Перетащите изображения сюда или кликните для выбора (максимум {MAX_IMAGES})
                   </div>
                 )}
               </div>
@@ -670,7 +615,7 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
                       <div style={{ position: 'relative' }}>
                         <img 
                           src={image.previewUrl} 
-                          alt={`Frame ${index + 1}`}
+                          alt={`Image ${index + 1}`}
                           draggable={false}
                           style={{ maxWidth: '200px', maxHeight: '200px', display: 'block', pointerEvents: 'none' }}
                         />
@@ -696,7 +641,6 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            pointerEvents: 'auto',
                             zIndex: 10
                           }}
                           title="Удалить"
@@ -704,10 +648,7 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
                           ✕
                         </button>
                       </div>
-                      <p style={{ marginTop: '8px', fontSize: '12px', textAlign: 'center', fontWeight: '500' }}>
-                        {index === 0 ? 'Start Frame' : 'End Frame'}
-                      </p>
-                      <p style={{ marginTop: '4px', fontSize: '11px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <p style={{ marginTop: '8px', fontSize: '11px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         {image.name}
                       </p>
                     </div>
@@ -716,98 +657,99 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
               </div>
             )}
 
-            {images.length >= 2 && (
+            {images.length > 0 && (
               <>
-                <div className="settings-control" style={{ marginTop: '20px', marginBottom: '10px' }}>
-                  <label htmlFor="prompt-input" style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
-                    Описание перехода (prompt) <span style={{ color: 'red' }}>*</span>
+                <div className="settings-control" style={{ marginTop: '5px', marginBottom: '0px' }}>
+                  <label htmlFor="prompt-input" style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                    Промпт <span style={{ color: 'red' }}>*</span>
                   </label>
-                  <input
+                  <textarea
+                    ref={textareaRef}
                     id="prompt-input"
-                    type="text"
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={isProcessing}
-                    placeholder="Например: animate, smooth transition, fade"
+                    placeholder="Опишите, что нужно изменить в изображении"
                     className="form-input"
-                    style={{ width: '100%' }}
+                    style={{ 
+                      width: '100%', 
+                      minHeight: '60px',
+                      resize: 'vertical',
+                      fontFamily: 'inherit',
+                      fontSize: '14px',
+                      padding: '10px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      outline: 'none'
+                    }}
                   />
                 </div>
 
-                <div className="settings-control" style={{ marginTop: '5px', marginBottom: '20px' }}>
-                  <label htmlFor="duration-slider" style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
-                    Длительность видео: {durationSeconds.toFixed(1)} сек
+                <div className="settings-control" style={{ marginTop: '0px', marginBottom: '5px' }}>
+                  <label htmlFor="aspect-ratio-select" style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                    Соотношение сторон
                   </label>
-                  <input
-                    id="duration-slider"
-                    type="range"
-                    min="0.5"
-                    max="10"
-                    step="0.1"
-                    value={durationSeconds}
-                    onChange={(e) => setDurationSeconds(parseFloat(e.target.value))}
+                  <select
+                    id="aspect-ratio-select"
+                    value={aspectRatio}
+                    onChange={(e) => setAspectRatio(e.target.value)}
                     disabled={isProcessing}
+                    className="form-input"
                     style={{ width: '100%' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85em', color: 'var(--text-secondary)', marginTop: '5px', width: '100%' }}>
-                    <span>0.5 сек</span>
-                    <span>10 сек</span>
-                  </div>
+                  >
+                    {ASPECT_RATIO_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+
+                <button
+                  onClick={handleGenerate}
+                  disabled={isProcessing || !prompt.trim()}
+                  className="btn btn-primary"
+                  style={{ marginTop: '5px' }}
+                >
+                  {isProcessing ? 'Генерация...' : 'Применить Qwen Edit Plus'}
+                </button>
               </>
             )}
 
-            {!resultUrl && images.length >= 2 && (
-              <button
-                id="generateVideoBtn"
-                className="btn btn-success"
-                disabled={!prompt || prompt.trim() === '' || isProcessing}
-                onClick={handleGenerate}
-              >
-                🎬 Сгенерировать видео
-              </button>
-            )}
-
-            {isProcessing && (
-              <div className="progress">
-                <div className="progress-bar"></div>
-                <span className="progress-text">Генерация видео...</span>
+            {error && (
+              <div className="error-message" style={{ marginTop: '20px', color: 'var(--error)', padding: '10px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px' }}>
+                {error}
               </div>
             )}
 
             {resultUrl && (
-              <div className="result-section">
-                <h3>Результат</h3>
-                <div className="video-preview-container">
-                  <video 
+              <div style={{ marginTop: '30px' }}>
+                <h3 style={{ marginBottom: '15px' }}>Результат:</h3>
+                <div style={{ marginBottom: '15px' }}>
+                  <img 
                     src={resultUrl} 
-                    controls 
-                    style={{ maxWidth: '100%', maxHeight: '500px' }}
-                  >
-                    Ваш браузер не поддерживает видео.
-                  </video>
+                    alt="Результат" 
+                    style={{ maxWidth: '100%', maxHeight: '600px', borderRadius: '8px', border: '1px solid var(--border)' }}
+                  />
                 </div>
-                <button
-                  id="downloadBtn"
-                  className="btn btn-primary"
-                  onClick={handleDownload}
-                >
-                  ⬇️ Скачать видео
-                </button>
-                <button
-                  id="clearBtn"
-                  className="btn btn-secondary"
-                  onClick={handleClear}
-                  style={{ marginLeft: '10px' }}
-                >
-                  Очистить
-                </button>
-              </div>
-            )}
-
-            {error && (
-              <div className="error-message">
-                {error}
+                <div>
+                  <button 
+                    onClick={handleDownload} 
+                    className="btn btn-primary"
+                    style={{ marginRight: '10px' }}
+                  >
+                    ⬇️ Скачать результат
+                  </button>
+                  <button 
+                    onClick={handleClear} 
+                    className="btn btn-secondary"
+                    style={{ marginLeft: '10px' }}
+                  >
+                    Очистить
+                  </button>
+                </div>
               </div>
             )}
           </div>

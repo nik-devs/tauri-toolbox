@@ -27,6 +27,24 @@ export default function AIPage() {
       icon: '📹',
       title: 'Video Upscale',
       description: 'Увеличение разрешения и FPS видео с помощью AI'
+    },
+    {
+      id: 'camera-control',
+      icon: '🎥',
+      title: 'Camera Control',
+      description: 'Изменение угла камеры и перспективы изображения'
+    },
+    {
+      id: 'qwen-edit-plus',
+      icon: '🎨',
+      title: 'Qwen Edit Plus',
+      description: 'Редактирование изображений с помощью AI модели Qwen Edit Plus'
+    },
+    {
+      id: 'image-to-pose',
+      icon: '🎭',
+      title: 'Image To Pose',
+      description: 'Генерация позы из изображения с помощью AI'
     }
   ];
 

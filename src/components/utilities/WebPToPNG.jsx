@@ -6,6 +6,7 @@ import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { tempDir } from '@tauri-apps/api/path';
+import { generateTimestamp } from '../../utils/fileUtils';
 
 export default function WebPToPNG() {
   const { handleBackToTools } = useApp();
@@ -273,7 +274,9 @@ export default function WebPToPNG() {
       const response = await fetch(result.pngUrl);
       const blob = await response.blob();
 
-      const fileName = selectedFile?.name.replace(/\.webp$/i, '.png') || 'converted.png';
+      const timestamp = generateTimestamp();
+      const baseFileName = selectedFile?.name.replace(/\.webp$/i, '') || 'converted';
+      const fileName = `${baseFileName}-${timestamp}.png`;
       const filePath = await save({
         filters: [{
           name: 'PNG Images',

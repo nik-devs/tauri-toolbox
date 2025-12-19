@@ -5,6 +5,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
+import { generateTimestamp } from '../../utils/fileUtils';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -441,13 +442,14 @@ export default function Upscale({ tabId = `upscale-${Date.now()}`, isActive = tr
       const response = await fetch(resultUrl);
       const blob = await response.blob();
 
+      const timestamp = generateTimestamp();
       // Используем Tauri dialog для сохранения
       const filePath = await save({
         filters: [{
           name: 'Images',
           extensions: ['png']
         }],
-        defaultPath: 'upscaled-image.png'
+        defaultPath: `upscaled-image-${timestamp}.png`
       });
 
       if (filePath) {
@@ -555,6 +557,7 @@ export default function Upscale({ tabId = `upscale-${Date.now()}`, isActive = tr
                   id="clearBtn"
                   className="btn btn-secondary"
                   onClick={handleClear}
+                  style={{ marginLeft: '10px' }}
                 >
                   Очистить
                 </button>

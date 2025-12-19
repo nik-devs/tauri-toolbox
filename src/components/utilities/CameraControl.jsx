@@ -7,7 +7,7 @@ import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
 const MIME_TYPES = {
   '.jpg': 'image/jpeg',
@@ -18,31 +18,54 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
-export default function RemoveBackground({ tabId = `remove-background-${Date.now()}`, isActive = true }) {
+// Базовые параметры (неизменны)
+const BASE_PARAMS = {
+  guidance_scale: 1,
+  num_inference_steps: 6,
+  acceleration: "regular",
+  negative_prompt: " ",
+  enable_safety_checker: false,
+  output_format: "png",
+  num_images: 1,
+  lora_scale: 1.25
+};
+
+// Значения для Rotate Right-Left
+const ROTATE_VALUES = [-90, -45, 0, 45, 90];
+
+// Значения для Move Forward → Close-Up
+const MOVE_FORWARD_VALUES = [0, 5, 10];
+
+// Значения для Vertical Angle (Bird ⬄ Worm)
+const VERTICAL_ANGLE_VALUES = [-1, 0, 1];
+
+export default function CameraControl({ tabId = `camera-control-${Date.now()}`, isActive = true }) {
   const { getTabState, updateTabState, setTabState } = useTabsState();
   const { addTask, updateTask } = useTasks();
-  
   const { getTask } = useTasks();
   
-  // Получаем состояние для этой конкретной вкладки
   const savedState = getTabState(tabId);
   
-  // Инициализируем состояние из сохраненных данных
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(savedState?.previewUrl || null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultUrl, setResultUrl] = useState(savedState?.resultUrl || null);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Параметры слайдеров
+  const [rotateValue, setRotateValue] = useState(savedState?.rotateValue ?? 0);
+  const [moveForward, setMoveForward] = useState(savedState?.moveForward ?? 0);
+  const [verticalAngle, setVerticalAngle] = useState(savedState?.verticalAngle ?? 0);
+  const [wideAngleLens, setWideAngleLens] = useState(savedState?.wideAngleLens ?? false);
+  
   const dropzoneRef = useRef(null);
   const currentTaskIdRef = useRef(savedState?.taskId || null);
   const fileNameRef = useRef(savedState?.fileName || null);
   const filePathRef = useRef(savedState?.filePath || null);
   const restoredTabIdRef = useRef(null);
 
-  // Восстанавливаем состояние при монтировании или смене tabId
   useEffect(() => {
-    // Если уже восстановили для этого tabId, не делаем повторно
     if (restoredTabIdRef.current === tabId) return;
     restoredTabIdRef.current = tabId;
     
@@ -50,7 +73,6 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       const state = getTabState(tabId);
       if (!state) return;
       
-      // Восстанавливаем базовое состояние
       if (state.previewUrl) {
         setPreviewUrl(state.previewUrl);
       }
@@ -66,23 +88,29 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       if (state.taskId) {
         currentTaskIdRef.current = state.taskId;
       }
+      if (state.rotateValue !== undefined) {
+        setRotateValue(state.rotateValue);
+      }
+      if (state.moveForward !== undefined) {
+        setMoveForward(state.moveForward);
+      }
+      if (state.verticalAngle !== undefined) {
+        setVerticalAngle(state.verticalAngle);
+      }
+      if (state.wideAngleLens !== undefined) {
+        setWideAngleLens(state.wideAngleLens);
+      }
       
-      // Восстанавливаем задачу если она есть
       if (state.taskId) {
         const task = getTask(state.taskId);
         if (task) {
-          // Если задача выполняется - показываем прогресс
           if (task.status === 'running') {
             setIsProcessing(true);
           }
-          
-          // Если задача завершена - показываем результат
           if (task.status === 'completed' && task.resultUrl) {
             setResultUrl(task.resultUrl);
             setIsProcessing(false);
           }
-          
-          // Если задача провалилась - показываем ошибку
           if (task.status === 'failed') {
             setError(task.error || 'Ошибка выполнения задачи');
             setIsProcessing(false);
@@ -90,7 +118,6 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
         }
       }
       
-      // Восстанавливаем File из сохраненного пути
       if (state.filePath && state.previewUrl) {
         try {
           const fileData = await readFile(state.filePath);
@@ -112,7 +139,6 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     restoreState();
   }, [tabId, getTabState, getTask]);
 
-  // Подписываемся на изменения задачи для этой вкладки
   const { tasks } = useTasks();
   useEffect(() => {
     if (!currentTaskIdRef.current) return;
@@ -120,7 +146,6 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     const task = tasks.find(t => t.id === currentTaskIdRef.current);
     if (!task) return;
     
-    // Обновляем состояние в зависимости от статуса задачи
     if (task.status === 'running' && !isProcessing) {
       setIsProcessing(true);
     } else if (task.status === 'completed' && task.resultUrl && resultUrl !== task.resultUrl) {
@@ -135,7 +160,6 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     }
   }, [tasks, isProcessing, resultUrl, error, tabId, updateTabState]);
 
-  // Сохраняем состояние при изменении (только для текущей вкладки)
   useEffect(() => {
     if (tabId && restoredTabIdRef.current === tabId) {
       updateTabState(tabId, {
@@ -143,15 +167,18 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
         filePath: selectedFile?.path || filePathRef.current,
         previewUrl,
         resultUrl,
-        taskId: currentTaskIdRef.current
+        taskId: currentTaskIdRef.current,
+        rotateValue,
+        moveForward,
+        verticalAngle,
+        wideAngleLens
       });
     }
-  }, [selectedFile, previewUrl, resultUrl, tabId, updateTabState]);
+  }, [selectedFile, previewUrl, resultUrl, rotateValue, moveForward, verticalAngle, wideAngleLens, tabId, updateTabState]);
 
   const handleFileSelect = useCallback(async (file) => {
     if (!file) return;
 
-    // Проверяем тип файла
     if (!file.type?.startsWith('image/')) {
       const ext = file.name ? file.name.substring(file.name.lastIndexOf('.')).toLowerCase() : '';
       if (!IMAGE_EXTENSIONS.includes(ext)) {
@@ -160,9 +187,8 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       }
     }
 
-    // Проверяем размер файла
     if (file.size > MAX_FILE_SIZE) {
-      setError(`Файл слишком большой. Максимальный размер: 20MB. Ваш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      setError(`Файл слишком большой. Максимальный размер: 5MB. Ваш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       return;
     }
 
@@ -172,7 +198,6 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     setError(null);
     setResultUrl(null);
 
-    // Создаем превью
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreviewUrl(e.target.result);
@@ -182,20 +207,17 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
   const handleDroppedFile = useCallback(async (path) => {
     try {
-      // Проверяем, что это файл, а не папка
       const isDir = await invoke('check_path_is_directory', { path }).catch(() => false);
       if (isDir) {
         return;
       }
 
-      // Проверяем расширение файла
       const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
       if (!IMAGE_EXTENSIONS.includes(ext)) {
         setError('Пожалуйста, выберите файл изображения');
         return;
       }
 
-      // Читаем файл через Tauri FS plugin
       const fileData = await readFile(path);
       const fileName = path.split(/[/\\]/).pop();
       const mimeType = MIME_TYPES[ext] || 'image/png';
@@ -211,23 +233,18 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     }
   }, [handleFileSelect]);
 
-  // Drag and drop через Tauri (только для активной вкладки)
-  // Используем один глобальный обработчик, но проверяем активность вкладки
   useEffect(() => {
-    if (!isActive) return; // Не регистрируем обработчик для неактивных вкладок
+    if (!isActive) return;
     
     const appWindow = getCurrentWindow();
 
     if (typeof appWindow.onDragDropEvent === 'function') {
       const unlisten = appWindow.onDragDropEvent((event) => {
-        // Проверяем, что эта вкладка все еще активна
         if (!isActive) return;
         
-        // Проверяем, что dropzone этой вкладки видим
         const dropzone = dropzoneRef.current;
         if (!dropzone) return;
         
-        // Проверяем, что родительский элемент (страница) активен
         const pageElement = dropzone.closest('.page');
         if (!pageElement || !pageElement.classList.contains('active')) return;
         
@@ -250,9 +267,8 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     }
   }, [handleDroppedFile, isActive]);
 
-  // HTML5 drag and drop (только для активной вкладки)
   const handleDragOver = useCallback((e) => {
-    if (!isActive) return; // Обрабатываем только активную вкладку
+    if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
@@ -268,7 +284,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
   }, [isActive]);
 
   const handleDrop = useCallback((e) => {
-    if (!isActive) return; // Обрабатываем только активную вкладку
+    if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -308,30 +324,34 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     fileNameRef.current = null;
     filePathRef.current = null;
     currentTaskIdRef.current = null;
+    setRotateValue(0);
+    setMoveForward(0);
+    setVerticalAngle(0);
     if (tabId) {
       setTabState(tabId, {
         fileName: null,
         filePath: null,
         previewUrl: null,
         resultUrl: null,
-        taskId: null
+        taskId: null,
+        rotateValue: 0,
+        moveForward: 0,
+        verticalAngle: 0
       });
     }
   }, [tabId, setTabState]);
 
-  const handleRemoveBackground = useCallback(async () => {
+  const handleGenerate = useCallback(async () => {
     if (!selectedFile && !previewUrl) {
       setError('Пожалуйста, выберите изображение');
       return;
     }
     
-    // Если файл не выбран, но есть previewUrl, нужно предупредить пользователя
     if (!selectedFile) {
       setError('Файл был потерян. Пожалуйста, выберите изображение заново.');
       return;
     }
 
-    // Получаем FAL API ключ из настроек
     let falKey;
     try {
       const settings = await invoke('load_settings');
@@ -346,22 +366,19 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       return;
     }
 
-    // Создаем задачу
     const taskId = addTask({
-      type: 'remove-background',
-      title: `Remove Background: ${selectedFile.name}`,
-      description: `Удаление фона изображения ${selectedFile.name}`,
+      type: 'camera-control',
+      title: `Camera Control: ${selectedFile.name}`,
+      description: `Изменение угла камеры для ${selectedFile.name}`,
       status: 'running',
       progress: 0,
-      tabId: tabId // Связываем задачу с вкладкой
+      tabId: tabId
     });
     currentTaskIdRef.current = taskId;
     updateTabState(tabId, { taskId });
 
-    // Динамически импортируем FAL клиент
     const { fal } = await import('@fal-ai/client');
 
-    // Настраиваем FAL клиент
     fal.config({
       credentials: falKey
     });
@@ -371,28 +388,29 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     setResultUrl(null);
 
     try {
-      // Проверяем размер файла
       if (selectedFile.size > MAX_FILE_SIZE) {
-        throw new Error(`Файл слишком большой. Максимальный размер: 20MB. Ваш файл: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
+        throw new Error(`Файл слишком большой. Максимальный размер: 5MB. Ваш файл: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
       }
 
       updateTask(taskId, { progress: 10, status: 'running' });
 
-      // Загружаем файл в FAL storage
       const imageUrl = await fal.storage.upload(selectedFile);
       console.log('Uploaded image URL:', imageUrl);
       updateTask(taskId, { progress: 30, status: 'running' });
 
-      // Вызываем remove background API
-      const result = await fal.subscribe("fal-ai/bria/background/remove", {
+      const result = await fal.subscribe("fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles", {
         input: {
-          image_url: imageUrl,
-          sync_mode: true
+          image_urls: [imageUrl],
+          rotate_right_left: rotateValue,
+          move_forward: moveForward,
+          vertical_angle: verticalAngle,
+          wide_angle_lens: wideAngleLens,
+          ...BASE_PARAMS
         },
         logs: true,
         onQueueUpdate: (update) => {
           if (update.status === "IN_PROGRESS") {
-            console.log('Processing:', update.logs?.map(log => log.message).join('\n'));
+            update.logs?.map((log) => log.message).forEach(console.log);
             updateTask(taskId, { progress: 50, status: 'running' });
           }
         },
@@ -400,8 +418,21 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
       updateTask(taskId, { progress: 90, status: 'running' });
 
-      // Показываем результат
-      const resultImageUrl = result.data.image.url;
+      // Результат может быть массивом изображений или одним изображением
+      let resultImageUrl;
+      if (result.data?.images && Array.isArray(result.data.images) && result.data.images.length > 0) {
+        resultImageUrl = result.data.images[0].url || result.data.images[0];
+      } else if (result.data?.image?.url) {
+        resultImageUrl = result.data.image.url;
+      } else if (result.data?.url) {
+        resultImageUrl = result.data.url;
+      } else if (typeof result.data === 'string') {
+        resultImageUrl = result.data;
+      } else {
+        console.log('Full result structure:', JSON.stringify(result, null, 2));
+        throw new Error('Не удалось получить результат. Проверьте структуру ответа в консоли.');
+      }
+      
       setResultUrl(resultImageUrl);
       
       updateTask(taskId, { 
@@ -410,10 +441,9 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
         resultUrl: resultImageUrl
       });
       
-      // Обновляем состояние вкладки
       updateTabState(tabId, { resultUrl: resultImageUrl });
     } catch (err) {
-      console.error('Ошибка remove background:', err);
+      console.error('Ошибка генерации:', err);
       let errorMessage = err.message || 'Ошибка при обработке изображения';
 
       if (err.body?.detail) {
@@ -431,28 +461,25 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedFile, addTask, updateTask, tabId, updateTabState]);
+  }, [selectedFile, rotateValue, moveForward, verticalAngle, wideAngleLens, addTask, updateTask, tabId, updateTabState]);
 
   const handleDownload = useCallback(async () => {
     if (!resultUrl) return;
 
     try {
-      // Скачиваем изображение
       const response = await fetch(resultUrl);
       const blob = await response.blob();
 
       const timestamp = generateTimestamp();
-      // Используем Tauri dialog для сохранения
       const filePath = await save({
         filters: [{
           name: 'Images',
           extensions: ['png']
         }],
-        defaultPath: `removed-background-${timestamp}.png`
+        defaultPath: `camera-control-result-${timestamp}.png`
       });
 
       if (filePath) {
-        // Сохраняем файл
         const arrayBuffer = await blob.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
         alert('Изображение успешно сохранено!');
@@ -465,16 +492,16 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
   return (
     <div 
-      id={`page-utility-remove-background-${tabId}`} 
+      id={`page-utility-camera-control-${tabId}`} 
       className={`page utility-page ${isActive ? 'active' : ''}`}
     >
       <div className="utility-header">
-        <h2>Remove Background</h2>
+        <h2>Camera Control</h2>
       </div>
       <div className="utility-content">
         <div className="tool-card">
           <p className="tool-description">
-            Удаление фона изображений с помощью AI
+            Изменение угла камеры и перспективы изображения с помощью AI
           </p>
 
           <div className="tool-content">
@@ -521,15 +548,109 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
               </div>
             )}
 
-            {!resultUrl && (
-              <button
-                id="removeBackgroundBtn"
-                className="btn btn-success"
-                disabled={(!selectedFile && !previewUrl) || isProcessing}
-                onClick={handleRemoveBackground}
-              >
-                ✂️ Удалить фон
-              </button>
+            {previewUrl && (
+              <>
+                <div className="preview-section">
+                  <div className="settings-control">
+                    <label htmlFor="rotate-slider" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontWeight: '500' }}>
+                      <span>Rotate Right-Left</span>
+                      <span style={{ fontSize: '0.9em', color: 'var(--text-primary)', fontWeight: '500' }}>{rotateValue}°</span>
+                    </label>
+                    <input
+                      type="range"
+                      id="rotate-slider"
+                      min="-90"
+                      max="90"
+                      step="45"
+                      value={rotateValue}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        // Привязываем к ближайшему жесткому значению
+                        const closest = ROTATE_VALUES.reduce((prev, curr) => 
+                          Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+                        );
+                        setRotateValue(closest);
+                      }}
+                      disabled={isProcessing}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="settings-control" style={{ marginTop: '15px' }}>
+                    <label htmlFor="move-forward-slider" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontWeight: '500' }}>
+                      <span>Move Forward → Close-Up</span>
+                      <span style={{ fontSize: '0.9em', color: 'var(--text-primary)', fontWeight: '500' }}>{moveForward}</span>
+                    </label>
+                    <input
+                      type="range"
+                      id="move-forward-slider"
+                      min="0"
+                      max="10"
+                      step="5"
+                      value={moveForward}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        // Привязываем к ближайшему жесткому значению
+                        const closest = MOVE_FORWARD_VALUES.reduce((prev, curr) => 
+                          Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+                        );
+                        setMoveForward(closest);
+                      }}
+                      disabled={isProcessing}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="settings-control" style={{ marginTop: '15px' }}>
+                    <label htmlFor="vertical-angle-slider" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontWeight: '500' }}>
+                      <span>Vertical Angle (Bird ⬄ Worm)</span>
+                      <span style={{ fontSize: '0.9em', color: 'var(--text-primary)', fontWeight: '500' }}>{verticalAngle}</span>
+                    </label>
+                    <input
+                      type="range"
+                      id="vertical-angle-slider"
+                      min="-1"
+                      max="1"
+                      step="1"
+                      value={verticalAngle}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        // Привязываем к ближайшему жесткому значению
+                        const closest = VERTICAL_ANGLE_VALUES.reduce((prev, curr) => 
+                          Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+                        );
+                        setVerticalAngle(closest);
+                      }}
+                      disabled={isProcessing}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="settings-control" style={{ marginTop: '15px' }}>
+                    <label htmlFor="wide-angle-lens-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '500', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        id="wide-angle-lens-checkbox"
+                        checked={wideAngleLens}
+                        onChange={(e) => setWideAngleLens(e.target.checked)}
+                        disabled={isProcessing}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <span>Wide-Angle Lens</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  id="generateBtn"
+                  className="btn btn-success"
+                  disabled={isProcessing}
+                  onClick={handleGenerate}
+                  style={{ marginTop: '5px' }}
+                >
+                  🎥 Применить Camera Control
+                </button>
+              </>
             )}
 
             {isProcessing && (

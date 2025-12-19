@@ -12,6 +12,9 @@ import Upscale from './components/utilities/Upscale';
 import RemoveBackground from './components/utilities/RemoveBackground';
 import FrameToFrameVideo from './components/utilities/FrameToFrameVideo';
 import VideoUpscale from './components/utilities/VideoUpscale';
+import CameraControl from './components/utilities/CameraControl';
+import QwenEditPlus from './components/utilities/QwenEditPlus';
+import ImageToPose from './components/utilities/ImageToPose';
 import { setWindowTitle, checkForUpdates } from './hooks/useTauri';
 
 function AppContent() {
@@ -78,6 +81,33 @@ function AppContent() {
                   />
                 );
               }
+              if (tab.utilityId === 'camera-control') {
+                return (
+                  <CameraControl 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={tab.active}
+                  />
+                );
+              }
+              if (tab.utilityId === 'qwen-edit-plus') {
+                return (
+                  <QwenEditPlus 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={tab.active}
+                  />
+                );
+              }
+              if (tab.utilityId === 'image-to-pose') {
+                return (
+                  <ImageToPose 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={tab.active}
+                  />
+                );
+              }
               return null;
             })}
           </>
@@ -119,6 +149,33 @@ function AppContent() {
               if (tab.utilityId === 'video-upscale') {
                 return (
                   <VideoUpscale 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={false}
+                  />
+                );
+              }
+              if (tab.utilityId === 'camera-control') {
+                return (
+                  <CameraControl 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={false}
+                  />
+                );
+              }
+              if (tab.utilityId === 'qwen-edit-plus') {
+                return (
+                  <QwenEditPlus 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={false}
+                  />
+                );
+              }
+              if (tab.utilityId === 'image-to-pose') {
+                return (
+                  <ImageToPose 
                     key={tab.id} 
                     tabId={tab.id}
                     isActive={false}

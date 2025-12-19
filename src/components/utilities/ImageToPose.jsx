@@ -7,7 +7,7 @@ import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
 const MIME_TYPES = {
   '.jpg': 'image/jpeg',
@@ -18,7 +18,17 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
-export default function RemoveBackground({ tabId = `remove-background-${Date.now()}`, isActive = true }) {
+const DRAW_MODE_OPTIONS = [
+  { value: 'full-pose', label: 'Full Pose' },
+  { value: 'body-pose', label: 'Body Pose' },
+  { value: 'face-pose', label: 'Face Pose' },
+  { value: 'hand-pose', label: 'Hand Pose' },
+  { value: 'face-hand-mask', label: 'Face Hand Mask' },
+  { value: 'face-mask', label: 'Face Mask' },
+  { value: 'hand-mask', label: 'Hand Mask' }
+];
+
+export default function ImageToPose({ tabId = `image-to-pose-${Date.now()}`, isActive = true }) {
   const { getTabState, updateTabState, setTabState } = useTabsState();
   const { addTask, updateTask } = useTasks();
   
@@ -34,6 +44,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
   const [resultUrl, setResultUrl] = useState(savedState?.resultUrl || null);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [drawMode, setDrawMode] = useState(savedState?.drawMode ?? 'full-pose');
   const dropzoneRef = useRef(null);
   const currentTaskIdRef = useRef(savedState?.taskId || null);
   const fileNameRef = useRef(savedState?.fileName || null);
@@ -56,6 +67,9 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       }
       if (state.resultUrl) {
         setResultUrl(state.resultUrl);
+      }
+      if (state.drawMode) {
+        setDrawMode(state.drawMode);
       }
       if (state.fileName) {
         fileNameRef.current = state.fileName;
@@ -143,10 +157,11 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
         filePath: selectedFile?.path || filePathRef.current,
         previewUrl,
         resultUrl,
+        drawMode,
         taskId: currentTaskIdRef.current
       });
     }
-  }, [selectedFile, previewUrl, resultUrl, tabId, updateTabState]);
+  }, [selectedFile, previewUrl, resultUrl, drawMode, tabId, updateTabState]);
 
   const handleFileSelect = useCallback(async (file) => {
     if (!file) return;
@@ -162,7 +177,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
     // Проверяем размер файла
     if (file.size > MAX_FILE_SIZE) {
-      setError(`Файл слишком большой. Максимальный размер: 20MB. Ваш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      setError(`Файл слишком большой. Максимальный размер: 5MB. Ваш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       return;
     }
 
@@ -212,22 +227,18 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
   }, [handleFileSelect]);
 
   // Drag and drop через Tauri (только для активной вкладки)
-  // Используем один глобальный обработчик, но проверяем активность вкладки
   useEffect(() => {
-    if (!isActive) return; // Не регистрируем обработчик для неактивных вкладок
+    if (!isActive) return;
     
     const appWindow = getCurrentWindow();
 
     if (typeof appWindow.onDragDropEvent === 'function') {
       const unlisten = appWindow.onDragDropEvent((event) => {
-        // Проверяем, что эта вкладка все еще активна
         if (!isActive) return;
         
-        // Проверяем, что dropzone этой вкладки видим
         const dropzone = dropzoneRef.current;
         if (!dropzone) return;
         
-        // Проверяем, что родительский элемент (страница) активен
         const pageElement = dropzone.closest('.page');
         if (!pageElement || !pageElement.classList.contains('active')) return;
         
@@ -252,7 +263,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
   // HTML5 drag and drop (только для активной вкладки)
   const handleDragOver = useCallback((e) => {
-    if (!isActive) return; // Обрабатываем только активную вкладку
+    if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
@@ -268,7 +279,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
   }, [isActive]);
 
   const handleDrop = useCallback((e) => {
-    if (!isActive) return; // Обрабатываем только активную вкладку
+    if (!isActive) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -305,6 +316,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     setResultUrl(null);
     setError(null);
     setIsProcessing(false);
+    setDrawMode('full-pose');
     fileNameRef.current = null;
     filePathRef.current = null;
     currentTaskIdRef.current = null;
@@ -314,18 +326,18 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
         filePath: null,
         previewUrl: null,
         resultUrl: null,
+        drawMode: 'full-pose',
         taskId: null
       });
     }
   }, [tabId, setTabState]);
 
-  const handleRemoveBackground = useCallback(async () => {
+  const handleGenerate = useCallback(async () => {
     if (!selectedFile && !previewUrl) {
       setError('Пожалуйста, выберите изображение');
       return;
     }
     
-    // Если файл не выбран, но есть previewUrl, нужно предупредить пользователя
     if (!selectedFile) {
       setError('Файл был потерян. Пожалуйста, выберите изображение заново.');
       return;
@@ -348,12 +360,12 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
     // Создаем задачу
     const taskId = addTask({
-      type: 'remove-background',
-      title: `Remove Background: ${selectedFile.name}`,
-      description: `Удаление фона изображения ${selectedFile.name}`,
+      type: 'image-to-pose',
+      title: `Image To Pose: ${selectedFile.name}`,
+      description: `Генерация позы из изображения ${selectedFile.name}`,
       status: 'running',
       progress: 0,
-      tabId: tabId // Связываем задачу с вкладкой
+      tabId: tabId
     });
     currentTaskIdRef.current = taskId;
     updateTabState(tabId, { taskId });
@@ -373,7 +385,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     try {
       // Проверяем размер файла
       if (selectedFile.size > MAX_FILE_SIZE) {
-        throw new Error(`Файл слишком большой. Максимальный размер: 20MB. Ваш файл: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
+        throw new Error(`Файл слишком большой. Максимальный размер: 5MB. Ваш файл: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
       }
 
       updateTask(taskId, { progress: 10, status: 'running' });
@@ -383,16 +395,16 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       console.log('Uploaded image URL:', imageUrl);
       updateTask(taskId, { progress: 30, status: 'running' });
 
-      // Вызываем remove background API
-      const result = await fal.subscribe("fal-ai/bria/background/remove", {
+      // Вызываем dwpose API
+      const result = await fal.subscribe("fal-ai/dwpose", {
         input: {
           image_url: imageUrl,
-          sync_mode: true
+          draw_mode: drawMode
         },
         logs: true,
         onQueueUpdate: (update) => {
           if (update.status === "IN_PROGRESS") {
-            console.log('Processing:', update.logs?.map(log => log.message).join('\n'));
+            update.logs?.map((log) => log.message).forEach(console.log);
             updateTask(taskId, { progress: 50, status: 'running' });
           }
         },
@@ -401,7 +413,18 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       updateTask(taskId, { progress: 90, status: 'running' });
 
       // Показываем результат
-      const resultImageUrl = result.data.image.url;
+      let resultImageUrl;
+      if (result.data?.image?.url) {
+        resultImageUrl = result.data.image.url;
+      } else if (result.data?.url) {
+        resultImageUrl = result.data.url;
+      } else if (typeof result.data === 'string') {
+        resultImageUrl = result.data;
+      } else {
+        console.log('Full result structure:', JSON.stringify(result, null, 2));
+        throw new Error('Не удалось получить результат. Проверьте структуру ответа в консоли.');
+      }
+      
       setResultUrl(resultImageUrl);
       
       updateTask(taskId, { 
@@ -413,7 +436,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
       // Обновляем состояние вкладки
       updateTabState(tabId, { resultUrl: resultImageUrl });
     } catch (err) {
-      console.error('Ошибка remove background:', err);
+      console.error('Ошибка генерации позы:', err);
       let errorMessage = err.message || 'Ошибка при обработке изображения';
 
       if (err.body?.detail) {
@@ -431,7 +454,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedFile, addTask, updateTask, tabId, updateTabState]);
+  }, [selectedFile, drawMode, addTask, updateTask, tabId, updateTabState]);
 
   const handleDownload = useCallback(async () => {
     if (!resultUrl) return;
@@ -448,7 +471,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
           name: 'Images',
           extensions: ['png']
         }],
-        defaultPath: `removed-background-${timestamp}.png`
+        defaultPath: `image-to-pose-result-${timestamp}.png`
       });
 
       if (filePath) {
@@ -465,16 +488,16 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
 
   return (
     <div 
-      id={`page-utility-remove-background-${tabId}`} 
+      id={`page-utility-image-to-pose-${tabId}`} 
       className={`page utility-page ${isActive ? 'active' : ''}`}
     >
       <div className="utility-header">
-        <h2>Remove Background</h2>
+        <h2>Image To Pose</h2>
       </div>
       <div className="utility-content">
         <div className="tool-card">
           <p className="tool-description">
-            Удаление фона изображений с помощью AI
+            Генерация позы из изображения с помощью AI
           </p>
 
           <div className="tool-content">
@@ -512,7 +535,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
             </div>
 
             {previewUrl && (
-              <div className="preview-section">
+              <div className="preview-section" style={{ marginBottom: '0px' }}>
                 <h3>Исходное изображение</h3>
                 <div className="image-preview-container">
                   <img src={previewUrl} alt="Preview" />
@@ -521,14 +544,36 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
               </div>
             )}
 
-            {!resultUrl && (
+            {previewUrl && (
+              <div className="settings-control" style={{ marginTop: '0px', marginBottom: '0px' }}>
+                <label htmlFor="draw-mode-select" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                  Режим отрисовки
+                </label>
+                <select
+                  id="draw-mode-select"
+                  value={drawMode}
+                  onChange={(e) => setDrawMode(e.target.value)}
+                  disabled={isProcessing}
+                  className="form-input"
+                  style={{ width: '100%' }}
+                >
+                  {DRAW_MODE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {!resultUrl && previewUrl && (
               <button
-                id="removeBackgroundBtn"
+                id="generatePoseBtn"
                 className="btn btn-success"
                 disabled={(!selectedFile && !previewUrl) || isProcessing}
-                onClick={handleRemoveBackground}
+                onClick={handleGenerate}
               >
-                ✂️ Удалить фон
+                🎭 Сгенерировать позу
               </button>
             )}
 
@@ -540,15 +585,30 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
             )}
 
             {resultUrl && (
-              <div className="result-section">
+              <div className="result-section" style={{ marginTop: '0px' }}>
                 <h3>Результат</h3>
                 <div className="image-preview-container">
                   <img src={resultUrl} alt="Result" />
+                </div>
+                <div style={{ 
+                  marginTop: '15px', 
+                  padding: '12px', 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)'
+                }}>
+                  <p style={{ margin: '0 0 8px 0', fontWeight: '500', color: 'var(--text-primary)' }}>
+                    💡 Подсказка:
+                  </p>
+                  <p style={{ margin: '0', fontSize: '0.9em', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    Эту позу можно использовать в <strong>Qwen Edit Plus</strong>. Загрузите позу и персонажа. Промпт: <code style={{ backgroundColor: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '3px' }}>The woman in image 2 adopts the pose from image 1</code>
+                  </p>
                 </div>
                 <button
                   id="downloadBtn"
                   className="btn btn-primary"
                   onClick={handleDownload}
+                  style={{ marginTop: '15px' }}
                 >
                   ⬇️ Скачать результат
                 </button>
@@ -556,7 +616,7 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
                   id="clearBtn"
                   className="btn btn-secondary"
                   onClick={handleClear}
-                  style={{ marginLeft: '10px' }}
+                  style={{ marginLeft: '10px', marginTop: '15px' }}
                 >
                   Очистить
                 </button>

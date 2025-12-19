@@ -482,13 +482,14 @@ export default function VideoUpscale({ tabId = `video-upscale-${Date.now()}`, is
       const response = await fetch(resultUrl);
       const blob = await response.blob();
 
+      const timestamp = generateTimestamp();
       // Используем Tauri dialog для сохранения
       const filePath = await save({
         filters: [{
           name: 'Videos',
           extensions: ['mp4']
         }],
-        defaultPath: 'upscaled-video.mp4'
+        defaultPath: `upscaled-video-${timestamp}.mp4`
       });
 
       if (filePath) {
@@ -630,6 +631,7 @@ export default function VideoUpscale({ tabId = `video-upscale-${Date.now()}`, is
                   id="clearBtn"
                   className="btn btn-secondary"
                   onClick={handleClear}
+                  style={{ marginLeft: '10px' }}
                 >
                   Очистить
                 </button>
