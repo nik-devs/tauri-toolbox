@@ -51,7 +51,7 @@ export default function Navigation() {
                 key={tab.id}
                 className={`toolbar-tab ${isTabActive ? 'active' : ''}`}
                 onClick={() => handleTabClick(tab.id)}
-                title={tabStatus ? `Статус: ${tabStatus.status}, Прогресс: ${tabStatus.progress || 0}%` : ''}
+                title={tabStatus ? `Статус: ${tabStatus.status}, Прогресс: ${Math.round(tabStatus.progress || 0)}%` : ''}
               >
                 {statusIcon && <span className="toolbar-tab-status">{statusIcon}</span>}
                 <span>{tab.title}</span>
@@ -61,7 +61,7 @@ export default function Navigation() {
                     marginLeft: '0.25rem',
                     opacity: 0.7 
                   }}>
-                    {tabStatus.progress || 0}%
+                    {Math.round(tabStatus.progress || 0)}%
                   </span>
                 )}
                 <button 
