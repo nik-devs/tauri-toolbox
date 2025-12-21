@@ -776,6 +776,9 @@ export default function StyleTransfer({ tabId = `style-transfer-${Date.now()}`, 
       if (selectedStyle === 'Sexting Department') {
         combinedPrompt = `score_10, score_9_up, score_9, score_8_up, score_7_up, best quality, extremely detailed, highest quality, masterpiece, Expressiveh, source_cartoon, BREAK,Expressiveh, g0thicPXL,${userPrompt},<lora:Expressive_H:0.5>,<lora:incase-ilff-v3-4:0.6>,<lora:princess_xl_v2:0.8>,<lora:g0th1cPXL:0.4>`;
         negative = `score_6, score_5, score_4, censored, (3d:0.5), EasyNegative, monochrome, watermark, censored, worst quality, low quality, normal quality, lowres, bad anatomy, bad hands, signature, watermarks, ugly, imperfect eyes, skewed eyes, unnatural face, unnatural body, error, extra limb, missing limbs, painting by bad-artist`;
+      } else if (selectedStyle === 'Isekai') {
+        combinedPrompt = `score_10, score_9_up, score_9, score_8_up, score_7_up, best quality, extremely detailed, highest quality, masterpiece, Expressiveh, source_anime, (cutesexyrobutts:0.6), BREAK,Expressiveh,${userPrompt},<lora:princess_xl_v2:0.7>,<lora:Expressive_H:0.6>,<lora:incase-ilff-v3-4:0.5>,<lora:NoctFlatStyleV2:0.6>`;
+        negative = `score_6, score_5, score_4, censored, (3d:0.5), EasyNegative, monochrome, watermark, censored, worst quality, low quality, normal quality, lowres, bad anatomy, bad hands, signature, watermarks, ugly, imperfect eyes, skewed eyes, unnatural face, unnatural body, error, extra limb, missing limbs, painting by bad-artist`;
       } else {
         // Dreamshift (по умолчанию)
         combinedPrompt = `score_10, score_9_up, score_9, score_8_up, score_7_up, best quality, extremely detailed, highest quality, masterpiece, Expressiveh, source_cartoon, BREAK,Drawn in the style of Summertime Saga, Expressiveh,${userPrompt},<lora:SummertimeSagaXL_Pony:0.8>,<lora:Zankuro_Style_Pony:0.5>,<lora:Expressive_H:0.5>`;
@@ -978,6 +981,7 @@ export default function StyleTransfer({ tabId = `style-transfer-${Date.now()}`, 
                   >
                     <option value="Dreamshift">Dreamshift</option>
                     <option value="Sexting Department">Sexting Department</option>
+                    <option value="Isekai">Isekai</option>
                   </select>
                 </div>
 
