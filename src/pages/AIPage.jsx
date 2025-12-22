@@ -51,6 +51,12 @@ export default function AIPage() {
       icon: '🎨',
       title: 'Style Transfer',
       description: 'Стилизация картинки с помощью AI'
+    },
+    {
+      id: 'image-tags',
+      icon: '🏷️',
+      title: 'Image Tags',
+      description: 'Генерация тегов для изображения с помощью AI'
     }
   ];
 

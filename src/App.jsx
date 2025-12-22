@@ -16,6 +16,7 @@ import CameraControl from './components/utilities/CameraControl';
 import QwenEditPlus from './components/utilities/QwenEditPlus';
 import ImageToPose from './components/utilities/ImageToPose';
 import StyleTransfer from './components/utilities/StyleTransfer';
+import ImageTags from './components/utilities/ImageTags';
 import { setWindowTitle, checkForUpdates } from './hooks/useTauri';
 
 function AppContent() {
@@ -118,6 +119,15 @@ function AppContent() {
                   />
                 );
               }
+              if (tab.utilityId === 'image-tags') {
+                return (
+                  <ImageTags 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={tab.active}
+                  />
+                );
+              }
               return null;
             })}
           </>
@@ -195,6 +205,15 @@ function AppContent() {
               if (tab.utilityId === 'style-transfer') {
                 return (
                   <StyleTransfer 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={false}
+                  />
+                );
+              }
+              if (tab.utilityId === 'image-tags') {
+                return (
+                  <ImageTags 
                     key={tab.id} 
                     tabId={tab.id}
                     isActive={false}
