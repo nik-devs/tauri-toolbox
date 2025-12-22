@@ -871,6 +871,34 @@ export default function StyleTransfer({ tabId = `style-transfer-${Date.now()}`, 
     }
   }, [selectedFile, userPrompt, denoisingStrength, selectedStyle, iterations, addTask, updateTask, tabId, updateTabState, runSingleIteration]);
 
+  const handleCopyToClipboard = useCallback(async (resultData) => {
+    if (!resultData) return;
+
+    try {
+      let blob;
+      
+      if (resultData.base64) {
+        // Конвертируем base64 в blob
+        const response = await fetch(`data:image/png;base64,${resultData.base64}`);
+        blob = await response.blob();
+      } else {
+        // Получаем из URL
+        const response = await fetch(resultData.dataUrl);
+        blob = await response.blob();
+      }
+
+      // Копируем в буфер обмена
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      showNotification('Изображение скопировано в буфер обмена!', 'success');
+    } catch (err) {
+      console.error('Ошибка копирования:', err);
+      setError('Ошибка при копировании изображения: ' + (err.message || err));
+    }
+  }, []);
+
   const handleDownload = useCallback(async (resultData) => {
     if (!resultData) return;
 
@@ -1091,6 +1119,13 @@ export default function StyleTransfer({ tabId = `style-transfer-${Date.now()}`, 
                         onClick={() => handleDownload(result)}
                       >
                         ⬇️ Скачать результат #{result.number}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => handleCopyToClipboard(result)}
+                        style={{ marginLeft: '10px' }}
+                      >
+                        📋 Копировать в буфер
                       </button>
                     </div>
                   );

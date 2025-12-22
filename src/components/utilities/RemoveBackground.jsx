@@ -434,6 +434,26 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     }
   }, [selectedFile, addTask, updateTask, tabId, updateTabState]);
 
+  const handleCopyToClipboard = useCallback(async () => {
+    if (!resultUrl) return;
+
+    try {
+      // Получаем изображение как blob
+      const response = await fetch(resultUrl);
+      const blob = await response.blob();
+
+      // Копируем в буфер обмена
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      showNotification('Изображение скопировано в буфер обмена!', 'success');
+    } catch (err) {
+      console.error('Ошибка копирования:', err);
+      setError('Ошибка при копировании изображения: ' + (err.message || err));
+    }
+  }, [resultUrl]);
+
   const handleDownload = useCallback(async () => {
     if (!resultUrl) return;
 
@@ -552,6 +572,14 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
                   onClick={handleDownload}
                 >
                   ⬇️ Скачать результат
+                </button>
+                <button
+                  id="copyBtn"
+                  className="btn btn-secondary"
+                  onClick={handleCopyToClipboard}
+                  style={{ marginLeft: '10px' }}
+                >
+                  📋 Копировать в буфер
                 </button>
                 <button
                   id="clearBtn"
