@@ -5,6 +5,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
+import { generateTimestamp } from '../../utils/fileUtils';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB для видео
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v'];
