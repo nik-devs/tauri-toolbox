@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
+import { showNotification } from '../../utils/notifications';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB для видео
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v'];
@@ -591,7 +592,7 @@ export default function VideoUpscale({ tabId = `video-upscale-${Date.now()}`, is
                   >
                     <option value="720p">720p</option>
                     <option value="1080p">1080p</option>
-                    <option value="4K">4K</option>
+                    <option value="4k">4k</option>
                   </select>
                 </div>
               </div>
