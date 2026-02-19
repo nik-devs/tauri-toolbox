@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use image::io::Reader as ImageReader;
 use serde::{Deserialize, Serialize};
 
@@ -304,5 +305,148 @@ pub async fn replicate_run(request: ReplicateRunRequest) -> Result<ReplicateRunR
     Ok(ReplicateRunResponse {
         output,
     })
+}
+
+/// Зацикливание видео: по длительности (-t) или по количеству циклов (-stream_loop N).
+/// mode: "duration" | "loops"
+/// duration: например "03:00:00" или "1:30", только для mode "duration"
+/// loop_count: число циклов, только для mode "loops"
+#[tauri::command]
+pub async fn ffmpeg_loop_video(
+    input_path: String,
+    output_path: String,
+    mode: String,
+    duration: Option<String>,
+    loop_count: Option<u32>,
+) -> Result<(), String> {
+    let (mode, duration, loop_count) = (mode.clone(), duration.clone(), loop_count);
+    let input_path = input_path.clone();
+    let output_path = output_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut cmd = Command::new("ffmpeg");
+        match mode.as_str() {
+            "duration" => {
+                let t = duration.as_deref().ok_or("Укажите длительность (например 03:00:00)")?;
+                cmd.args(["-y", "-stream_loop", "-1", "-i", &input_path, "-t", t, "-c", "copy", &output_path]);
+            }
+            "loops" => {
+                let n = loop_count.ok_or("Укажите количество циклов")?;
+                if n == 0 {
+                    return Err("Количество циклов должно быть больше 0".to_string());
+                }
+                // ffmpeg -stream_loop N даёт (1 + N) воспроизведений; для ровно n циклов передаём n - 1
+                let stream_loop = n - 1;
+                cmd.args([
+                    "-y",
+                    "-stream_loop",
+                    &stream_loop.to_string(),
+                    "-i",
+                    &input_path,
+                    "-c",
+                    "copy",
+                    &output_path,
+                ]);
+            }
+            _ => return Err("Режим должен быть duration или loops".to_string()),
+        }
+        let status = cmd.status().map_err(|e| format!("Ошибка запуска ffmpeg: {}", e))?;
+        if !status.success() {
+            return Err("ffmpeg завершился с ошибкой".to_string());
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Задача ffmpeg: {}", e))?
+}
+
+/// Реверс видео (и аудио).
+#[tauri::command]
+pub async fn ffmpeg_reverse_video(input_path: String, output_path: String) -> Result<(), String> {
+    let (input_path, output_path) = (input_path.clone(), output_path.clone());
+    tokio::task::spawn_blocking(move || {
+        let status = Command::new("ffmpeg")
+            .args([
+                "-i",
+                &input_path,
+                "-vf",
+                "reverse",
+                "-af",
+                "areverse",
+                "-y",
+                &output_path,
+            ])
+            .status()
+            .map_err(|e| format!("Ошибка запуска ffmpeg: {}", e))?;
+        if !status.success() {
+            return Err("ffmpeg завершился с ошибкой".to_string());
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Задача ffmpeg: {}", e))?
+}
+
+/// Извлечение звука из видео в WAV (pcm_s16le).
+#[tauri::command]
+pub async fn ffmpeg_extract_sound(input_path: String, output_path: String) -> Result<(), String> {
+    let (input_path, output_path) = (input_path.clone(), output_path.clone());
+    tokio::task::spawn_blocking(move || {
+        let status = Command::new("ffmpeg")
+            .args([
+                "-i",
+                &input_path,
+                "-vn",
+                "-c:a",
+                "pcm_s16le",
+                "-y",
+                &output_path,
+            ])
+            .status()
+            .map_err(|e| format!("Ошибка запуска ffmpeg: {}", e))?;
+        if !status.success() {
+            return Err("ffmpeg завершился с ошибкой".to_string());
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Задача ffmpeg: {}", e))?
+}
+
+/// Наложение звука на видео. Видео без звука или заменяем дорожку.
+#[tauri::command]
+pub async fn ffmpeg_overlay_sound(
+    video_path: String,
+    audio_path: String,
+    output_path: String,
+) -> Result<(), String> {
+    let (video_path, audio_path, output_path) =
+        (video_path.clone(), audio_path.clone(), output_path.clone());
+    tokio::task::spawn_blocking(move || {
+        let status = Command::new("ffmpeg")
+            .args([
+                "-i",
+                &video_path,
+                "-i",
+                &audio_path,
+                "-map",
+                "0:v",
+                "-map",
+                "1:a",
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-y",
+                &output_path,
+            ])
+            .status()
+            .map_err(|e| format!("Ошибка запуска ffmpeg: {}", e))?;
+        if !status.success() {
+            return Err("ffmpeg завершился с ошибкой".to_string());
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Задача ffmpeg: {}", e))?
 }
 

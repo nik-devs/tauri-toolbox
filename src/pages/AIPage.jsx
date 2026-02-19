@@ -41,6 +41,12 @@ export default function AIPage() {
       description: 'Редактирование изображений с помощью AI модели Qwen Edit Plus'
     },
     {
+      id: 'nano-edit-pro',
+      icon: '🍌',
+      title: 'Nano Edit Pro',
+      description: 'Редактирование изображений с Nano Banana Pro (fal.ai)'
+    },
+    {
       id: 'image-to-pose',
       icon: '🎭',
       title: 'Image To Pose',

@@ -8,12 +8,17 @@ import AIPage from './pages/AIPage';
 import SettingsPage from './pages/SettingsPage';
 import TasksPage from './pages/TasksPage';
 import WebPToPNG from './components/utilities/WebPToPNG';
+import LoopVideo from './components/utilities/LoopVideo';
+import ReverseVideo from './components/utilities/ReverseVideo';
+import ExtractSound from './components/utilities/ExtractSound';
+import OverlaySoundOnVideo from './components/utilities/OverlaySoundOnVideo';
 import Upscale from './components/utilities/Upscale';
 import RemoveBackground from './components/utilities/RemoveBackground';
 import FrameToFrameVideo from './components/utilities/FrameToFrameVideo';
 import VideoUpscale from './components/utilities/VideoUpscale';
 import CameraControl from './components/utilities/CameraControl';
 import QwenEditPlus from './components/utilities/QwenEditPlus';
+import NanoEditPro from './components/utilities/NanoEditPro';
 import ImageToPose from './components/utilities/ImageToPose';
 import StyleTransfer from './components/utilities/StyleTransfer';
 import ImageTags from './components/utilities/ImageTags';
@@ -30,9 +35,11 @@ function AppContent() {
   // Рендерим только активные компоненты
   const renderContent = () => {
     // Обычные утилиты
-    if (activeUtility === 'webp-to-png') {
-      return <WebPToPNG />;
-    }
+    if (activeUtility === 'webp-to-png') return <WebPToPNG />;
+    if (activeUtility === 'loop-video') return <LoopVideo />;
+    if (activeUtility === 'reverse-video') return <ReverseVideo />;
+    if (activeUtility === 'extract-sound') return <ExtractSound />;
+    if (activeUtility === 'overlay-sound') return <OverlaySoundOnVideo />;
 
     // Страницы
     if (currentPage === 'tools' && !activeUtility) {
@@ -95,6 +102,15 @@ function AppContent() {
               if (tab.utilityId === 'qwen-edit-plus') {
                 return (
                   <QwenEditPlus 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={tab.active}
+                  />
+                );
+              }
+              if (tab.utilityId === 'nano-edit-pro') {
+                return (
+                  <NanoEditPro 
                     key={tab.id} 
                     tabId={tab.id}
                     isActive={tab.active}
@@ -187,6 +203,15 @@ function AppContent() {
               if (tab.utilityId === 'qwen-edit-plus') {
                 return (
                   <QwenEditPlus 
+                    key={tab.id} 
+                    tabId={tab.id}
+                    isActive={false}
+                  />
+                );
+              }
+              if (tab.utilityId === 'nano-edit-pro') {
+                return (
+                  <NanoEditPro 
                     key={tab.id} 
                     tabId={tab.id}
                     isActive={false}

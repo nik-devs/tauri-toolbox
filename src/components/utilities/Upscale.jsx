@@ -6,7 +6,10 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
 import { generateTimestamp } from '../../utils/fileUtils';
+import { resizeImageFileToMaxPixels } from '../../utils/imageUtils';
 import { showNotification } from '../../utils/notifications';
+
+const FAL_MAX_IMAGE_PIXELS = 4194304;
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -379,8 +382,11 @@ export default function Upscale({ tabId = `upscale-${Date.now()}`, isActive = tr
 
       updateTask(taskId, { progress: 10, status: 'running' });
 
+      // Уменьшаем изображение, если превышает лимит FAL (4194304 пикселей)
+      const fileToUpload = await resizeImageFileToMaxPixels(selectedFile, FAL_MAX_IMAGE_PIXELS);
+
       // Загружаем файл в FAL storage
-      const imageUrl = await fal.storage.upload(selectedFile);
+      const imageUrl = await fal.storage.upload(fileToUpload);
       console.log('Uploaded image URL:', imageUrl);
       updateTask(taskId, { progress: 30, status: 'running' });
 
@@ -439,15 +445,25 @@ export default function Upscale({ tabId = `upscale-${Date.now()}`, isActive = tr
     if (!resultUrl) return;
 
     try {
-      // Получаем изображение как blob
       const response = await fetch(resultUrl);
       const blob = await response.blob();
-
-      // Копируем в буфер обмена
+      // Буфер обмена во многих средах принимает только image/png — конвертируем через canvas
+      let blobToWrite = blob;
+      if (blob.type !== 'image/png') {
+        const img = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas 2d недоступен');
+        ctx.drawImage(img, 0, 0);
+        blobToWrite = await new Promise((resolve, reject) => {
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png', 0.95);
+        });
+      }
       await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
+        new ClipboardItem({ 'image/png': blobToWrite })
       ]);
-
       showNotification('Изображение скопировано в буфер обмена!', 'success');
     } catch (err) {
       console.error('Ошибка копирования:', err);

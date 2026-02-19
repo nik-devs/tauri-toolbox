@@ -19,7 +19,11 @@ fn main() {
             commands::save_settings,
             commands::load_settings,
             commands::check_path_is_directory,
-            commands::replicate_run
+            commands::replicate_run,
+            commands::ffmpeg_loop_video,
+            commands::ffmpeg_reverse_video,
+            commands::ffmpeg_extract_sound,
+            commands::ffmpeg_overlay_sound
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

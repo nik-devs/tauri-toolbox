@@ -878,18 +878,15 @@ export default function StyleTransfer({ tabId = `style-transfer-${Date.now()}`, 
       let blob;
       
       if (resultData.base64) {
-        // Конвертируем base64 в blob
         const response = await fetch(`data:image/png;base64,${resultData.base64}`);
         blob = await response.blob();
       } else {
-        // Получаем из URL
         const response = await fetch(resultData.dataUrl);
         blob = await response.blob();
       }
-
-      // Копируем в буфер обмена
+      const type = blob.type || 'image/png';
       await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
+        new ClipboardItem({ [type]: blob })
       ]);
 
       showNotification('Изображение скопировано в буфер обмена!', 'success');

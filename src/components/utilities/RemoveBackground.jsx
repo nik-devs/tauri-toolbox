@@ -438,13 +438,11 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
     if (!resultUrl) return;
 
     try {
-      // Получаем изображение как blob
       const response = await fetch(resultUrl);
       const blob = await response.blob();
-
-      // Копируем в буфер обмена
+      const type = blob.type || 'image/png';
       await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
+        new ClipboardItem({ [type]: blob })
       ]);
 
       showNotification('Изображение скопировано в буфер обмена!', 'success');
