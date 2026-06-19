@@ -4,6 +4,42 @@ use std::process::Command;
 use image::io::Reader as ImageReader;
 use serde::{Deserialize, Serialize};
 
+/// Находит исполняемый файл ffmpeg.
+///
+/// GUI-приложения на macOS запускаются с урезанным PATH (`/usr/bin:/bin:...`),
+/// в который не входят каталоги Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`),
+/// поэтому типовые расположения проверяем явно, а уже потом падаем на PATH.
+fn ffmpeg_path() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    let candidates: &[&str] = &[
+        "/opt/homebrew/bin/ffmpeg", // Apple Silicon (Homebrew)
+        "/usr/local/bin/ffmpeg",    // Intel (Homebrew) / ручная установка
+        "/opt/local/bin/ffmpeg",    // MacPorts
+    ];
+    #[cfg(not(target_os = "macos"))]
+    let candidates: &[&str] = &[];
+
+    for candidate in candidates {
+        if Path::new(candidate).exists() {
+            return Ok((*candidate).to_string());
+        }
+    }
+
+    // Фолбэк: ffmpeg из PATH (работает на Windows и при запуске из терминала).
+    if Command::new("ffmpeg").arg("-version").output().is_ok() {
+        return Ok("ffmpeg".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Err("ffmpeg не найден. Установите его командой: brew install ffmpeg".to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("ffmpeg не найден. Убедитесь, что ffmpeg установлен и доступен в PATH".to_string())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConversionResult {
     pub converted: usize,
@@ -323,7 +359,7 @@ pub async fn ffmpeg_loop_video(
     let input_path = input_path.clone();
     let output_path = output_path.clone();
     tokio::task::spawn_blocking(move || {
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = Command::new(ffmpeg_path()?);
         match mode.as_str() {
             "duration" => {
                 let t = duration.as_deref().ok_or("Укажите длительность (например 03:00:00)")?;
@@ -364,7 +400,7 @@ pub async fn ffmpeg_loop_video(
 pub async fn ffmpeg_reverse_video(input_path: String, output_path: String) -> Result<(), String> {
     let (input_path, output_path) = (input_path.clone(), output_path.clone());
     tokio::task::spawn_blocking(move || {
-        let status = Command::new("ffmpeg")
+        let status = Command::new(ffmpeg_path()?)
             .args([
                 "-i",
                 &input_path,
@@ -391,7 +427,7 @@ pub async fn ffmpeg_reverse_video(input_path: String, output_path: String) -> Re
 pub async fn ffmpeg_extract_sound(input_path: String, output_path: String) -> Result<(), String> {
     let (input_path, output_path) = (input_path.clone(), output_path.clone());
     tokio::task::spawn_blocking(move || {
-        let status = Command::new("ffmpeg")
+        let status = Command::new(ffmpeg_path()?)
             .args([
                 "-i",
                 &input_path,
@@ -422,7 +458,7 @@ pub async fn ffmpeg_overlay_sound(
     let (video_path, audio_path, output_path) =
         (video_path.clone(), audio_path.clone(), output_path.clone());
     tokio::task::spawn_blocking(move || {
-        let status = Command::new("ffmpeg")
+        let status = Command::new(ffmpeg_path()?)
             .args([
                 "-i",
                 &video_path,

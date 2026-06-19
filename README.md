@@ -28,6 +28,8 @@
 - Node.js (v18 или выше)
 - Rust (последняя стабильная версия)
 - Windows SDK (для сборки на Windows)
+- Xcode Command Line Tools (для сборки на macOS): `xcode-select --install`
+- ffmpeg (для видео/аудио утилит — см. раздел [Зависимость ffmpeg](#зависимость-ffmpeg))
 
 ### Установка Rust
 
@@ -59,6 +61,31 @@ cargo --version
 rustup target add x86_64-pc-windows-msvc
 ```
 
+**Установка компонентов для macOS (Apple Silicon, M1–M5):**
+
+```bash
+rustup target add aarch64-apple-darwin
+```
+
+### Зависимость ffmpeg
+
+Видео/аудио утилиты (зацикливание, реверс, извлечение и наложение звука) вызывают
+системный `ffmpeg` — он **не входит** в состав приложения, его нужно установить отдельно.
+
+**macOS:**
+
+```bash
+brew install ffmpeg
+```
+
+Приложение ищет ffmpeg в типовых местах установки Homebrew/MacPorts
+(`/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`), потому что GUI-приложения
+на macOS запускаются с урезанным `PATH`. Если ffmpeg не найден, утилита покажет
+подсказку с командой установки.
+
+**Windows:** установите ffmpeg и убедитесь, что он доступен в `PATH`
+(например, через `winget install Gyan.FFmpeg` или `choco install ffmpeg`).
+
 ### Установка зависимостей
 
 ```bash
@@ -78,6 +105,22 @@ npm run tauri build
 ```
 
 Собранное приложение будет находиться в `src-tauri/target/release/bundle/`.
+
+**Сборка под macOS (Apple Silicon):**
+
+```bash
+npm run tauri build -- --target aarch64-apple-darwin
+```
+
+> ⚠️ Сборка **не подписана** Apple Developer ID (для личного использования это нормально).
+> При первом запуске Gatekeeper может заблокировать приложение. Обойти разово:
+> ПКМ по `.app` → «Открыть» → «Открыть», либо снять карантин командой:
+>
+> ```bash
+> xattr -dr com.apple.quarantine /путь/к/Toolbox.app
+> ```
+>
+> Автообновление (`latest.json`) настроено только для Windows-сборки.
 
 **Примечание:** Перед первой сборкой необходимо добавить иконки в папку `src-tauri/icons/`:
 - `32x32.png`
