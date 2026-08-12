@@ -159,9 +159,14 @@ export const MAX_REF_IMAGES = 3;
 // channel (see runpodRunVideo).
 //   fl2va: MiniMaxH3ImageToVideo + optional firstFrameName/lastFrameName.
 //   ref2va: MiniMaxH3ReferenceToVideo + optional refImageNames[] (Image 1..N).
+// Max reference videos / audios the ref2va node exposes.
+export const MAX_REF_VIDEOS = 3;
+export const MAX_REF_AUDIOS = 3;
+
 export function buildWorkflow({
   tool, unetFile, prompt, width, height, length, steps = 20, seed,
-  firstFrameName, lastFrameName, refImageNames = [], loras = [],
+  firstFrameName, lastFrameName, refImageNames = [],
+  refVideosB64 = [], refAudiosB64 = [], loras = [],
 }) {
   const wf = {
     unet: { class_type: 'UNETLoader', inputs: { unet_name: unetFile, weight_dtype: 'default' } },
@@ -196,6 +201,19 @@ export function buildWorkflow({
     };
     refImageNames.slice(0, MAX_REF_IMAGES).forEach((name, i) => {
       refInputs[`ref_image_${i}`] = loadCropped(`ref${i}`, name);
+    });
+    // Reference videos: base64 → LoadVideoBase64 → frames + paired soundtrack.
+    refVideosB64.slice(0, MAX_REF_VIDEOS).forEach((b64, i) => {
+      const nid = `refvid${i}`;
+      wf[nid] = { class_type: 'LoadVideoBase64', inputs: { video_base64: b64 } };
+      refInputs[`ref_video_${i}`] = [nid, 0];       // IMAGE (frames)
+      refInputs[`ref_video_audio_${i}`] = [nid, 1]; // AUDIO (soundtrack)
+    });
+    // Standalone reference audio: base64 → LoadAudioBase64 → AUDIO.
+    refAudiosB64.slice(0, MAX_REF_AUDIOS).forEach((b64, i) => {
+      const nid = `refaud${i}`;
+      wf[nid] = { class_type: 'LoadAudioBase64', inputs: { audio_base64: b64 } };
+      refInputs[`ref_audio_${i}`] = [nid, 0];
     });
     wf.h3 = { class_type: 'MiniMaxH3ReferenceToVideo', inputs: refInputs };
   } else {

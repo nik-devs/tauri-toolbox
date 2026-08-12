@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, openFileDialog } from '../../hooks/useTauri';
-import { readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { readFile, writeFile, remove } from '@tauri-apps/plugin-fs';
+import { tempDir, join } from '@tauri-apps/api/path';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useTabsState } from '../../contexts/TabsStateContext';
 import { useTasks } from '../../contexts/TasksContext';
@@ -12,31 +13,41 @@ import {
 } from '../../utils/h3';
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.heic', '.heif'];
-const DIALOG_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'heif'];
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.m4v'];
+const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
 const MIME_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.bmp': 'image/bmp', '.heic': 'image/heic', '.heif': 'image/heif' };
-const HEIC_EXTS = ['.heic', '.heif'];
 
-function isHeic(name, mime) {
-  const ext = name ? name.substring(name.lastIndexOf('.')).toLowerCase() : '';
-  return HEIC_EXTS.includes(ext) || /heic|heif/i.test(mime || '');
+function extOf(name) { return name ? name.substring(name.lastIndexOf('.')).toLowerCase() : ''; }
+function kindOf(name, mime) {
+  const ext = extOf(name);
+  if (IMAGE_EXTENSIONS.includes(ext) || (mime || '').startsWith('image/')) return 'image';
+  if (VIDEO_EXTENSIONS.includes(ext) || (mime || '').startsWith('video/')) return 'video';
+  if (AUDIO_EXTENSIONS.includes(ext) || (mime || '').startsWith('audio/')) return 'audio';
+  return null;
 }
 
-// The worker's Pillow can't read HEIC; WKWebView decodes it natively, so we
-// re-encode any HEIC/HEIF to PNG in-app via canvas before upload.
-async function blobToPng(blob) {
+// Normalize any input image to a compact JPEG: downscale to maxDim (RunPod caps
+// the /run body at 10 MiB, and the worker center-crops to ≤1344×768 anyway, so
+// a 12 MP iPhone photo is pointless) and re-encode. WKWebView decodes HEIC
+// natively, so this also handles HEIC/HEIF — no lossless PNG blow-up.
+async function normalizeImage(blob, { maxDim = 1600, quality = 0.9 } = {}) {
   const url = URL.createObjectURL(blob);
   try {
     const img = await new Promise((resolve, reject) => {
       const im = new Image();
       im.onload = () => resolve(im);
-      im.onerror = () => reject(new Error('Не удалось декодировать HEIC'));
+      im.onerror = () => reject(new Error('Не удалось декодировать изображение (HEIC?)'));
       im.src = url;
     });
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
     const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    canvas.getContext('2d').drawImage(img, 0, 0);
-    const dataUri = canvas.toDataURL('image/png');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); // flatten alpha for JPEG
+    ctx.drawImage(img, 0, 0, w, h);
+    const dataUri = canvas.toDataURL('image/jpeg', quality);
     return { dataUri, base64: dataUri.split(',')[1] || '' };
   } finally {
     URL.revokeObjectURL(url);
@@ -47,14 +58,18 @@ const TOOL_META = {
   fl2va: {
     title: 'MiniMax H3 — Text/Image → Video',
     endpointKey: 'Fl2vaEndpoint',
-    maxImages: 2,
+    kinds: ['image'],
+    limits: { image: 2 },
+    dialogExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'heif'],
     imagesHint: 'Опционально: 1–2 кадра. Первый — стартовый кадр, второй — финальный. Без кадров — чистый text-to-video.',
   },
   ref2va: {
     title: 'MiniMax H3 — Reference → Video',
     endpointKey: 'Ref2vaEndpoint',
-    maxImages: 3,
-    imagesHint: 'Опционально: до 3 референс-изображений (Image 1, Image 2 …). Всё необязательно — можно и без референсов.',
+    kinds: ['image', 'video', 'audio'],
+    limits: { image: 3, video: 3, audio: 3 },
+    dialogExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'heif', 'mp4', 'mov', 'webm', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
+    imagesHint: 'Опционально: до 3 картинок + до 3 видео (со своим звуком) + до 3 аудио. Всё необязательно.',
   },
 };
 
@@ -119,66 +134,65 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
     try { return await invoke('load_settings'); } catch { return { api_keys: {} }; }
   }, []);
 
-  const addImage = useCallback((img) => {
+  // items: {kind:'image'|'video'|'audio', name, mime, base64, dataUri?}
+  const addMedia = useCallback((item) => {
     setError(null);
     setImages((prev) => {
-      if (prev.length >= meta.maxImages) {
-        setError(`Максимум ${meta.maxImages} изобр. для этого инструмента`);
-        return prev;
+      const limit = meta.limits[item.kind] || 0;
+      if (!meta.kinds.includes(item.kind)) {
+        setError('Этот инструмент не принимает такой тип файла'); return prev;
       }
-      return [...prev, img];
+      if (prev.filter((m) => m.kind === item.kind).length >= limit) {
+        setError(`Максимум ${limit} (${item.kind}) для этого инструмента`); return prev;
+      }
+      return [...prev, item];
     });
-  }, [meta.maxImages]);
+  }, [meta.kinds, meta.limits]);
 
-  // From a browser File (drag-drop): keep bytes in memory; HEIC → PNG.
+  const renameToJpg = (name) => name.replace(/\.[^.]+$/, '') + '.jpg';
+
+  // From a browser File (drag-drop). Images → compact JPEG; video/audio kept raw
+  // in memory (shrunk via ffmpeg at generation time).
   const addFromFile = useCallback(async (file) => {
-    const ext = file.name ? file.name.substring(file.name.lastIndexOf('.')).toLowerCase() : '';
-    if (!file.type?.startsWith('image/') && !IMAGE_EXTENSIONS.includes(ext)) {
-      setError('Поддерживаются только изображения'); return;
-    }
+    const kind = kindOf(file.name, file.type);
+    if (!kind) { setError('Неподдерживаемый тип файла'); return; }
     try {
-      const baseName = (file.name || `image${ext || '.png'}`);
-      if (isHeic(baseName, file.type)) {
-        const { dataUri, base64 } = await blobToPng(file);
-        addImage({ name: baseName.replace(/\.(heic|heif)$/i, '.png'), mime: 'image/png', base64, dataUri });
+      const name = file.name || `file${extOf(file.name) || ''}`;
+      if (kind === 'image') {
+        const { dataUri, base64 } = await normalizeImage(file);
+        addMedia({ kind, name: renameToJpg(name), mime: 'image/jpeg', base64, dataUri });
         return;
       }
-      const dataUri = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = (e) => resolve(e.target.result);
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
-      addImage({ name: baseName, mime: file.type || MIME_TYPES[ext] || 'image/png', base64: dataUri.split(',')[1] || '', dataUri });
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      addMedia({ kind, name, mime: file.type || MIME_TYPES[extOf(name)] || '', base64: bytesToBase64(bytes) });
     } catch (err) {
       setError('Ошибка обработки файла: ' + (err.message || err));
     }
-  }, [addImage]);
+  }, [addMedia]);
 
-  // From a filesystem path (file dialog): read bytes; HEIC → PNG.
+  // From a filesystem path (file dialog).
   const addFromPath = useCallback(async (path) => {
-    const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
-    if (!IMAGE_EXTENSIONS.includes(ext)) { setError('Поддерживаются только изображения'); return; }
+    const kind = kindOf(path, '');
+    if (!kind) { setError('Неподдерживаемый тип файла'); return; }
     const bytes = await readFile(path);
     const name = path.split(/[/\\]/).pop();
-    if (isHeic(name, '')) {
-      const { dataUri, base64 } = await blobToPng(new Blob([bytes], { type: 'image/heic' }));
-      addImage({ name: name.replace(/\.(heic|heif)$/i, '.png'), mime: 'image/png', base64, dataUri });
+    if (kind === 'image') {
+      const mime = MIME_TYPES[extOf(name)] || 'image/jpeg';
+      const { dataUri, base64 } = await normalizeImage(new Blob([bytes], { type: mime }));
+      addMedia({ kind, name: renameToJpg(name), mime: 'image/jpeg', base64, dataUri });
       return;
     }
-    const mime = MIME_TYPES[ext] || 'image/png';
-    const base64 = bytesToBase64(bytes);
-    addImage({ name, mime, base64, dataUri: `data:${mime};base64,${base64}` });
-  }, [addImage]);
+    addMedia({ kind, name, mime: MIME_TYPES[extOf(name)] || '', base64: bytesToBase64(bytes) });
+  }, [addMedia]);
 
   const handleAttach = useCallback(async () => {
     try {
-      const path = await openFileDialog({ filters: [{ name: 'Images', extensions: DIALOG_EXTENSIONS }] });
+      const path = await openFileDialog({ filters: [{ name: 'Media', extensions: meta.dialogExtensions }] });
       if (path) await addFromPath(path);
     } catch (err) {
       if (err !== 'User cancelled the dialog') setError('Ошибка выбора файла: ' + (err.message || err));
     }
-  }, [addFromPath]);
+  }, [addFromPath, meta.dialogExtensions]);
 
   const handleDragOver = useCallback((e) => { if (!isActive) return; e.preventDefault(); e.stopPropagation(); setIsDragging(true); }, [isActive]);
   const handleDragLeave = useCallback((e) => {
@@ -195,18 +209,37 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
 
   const toggleLora = useCallback((id) => setEnabledLoras((p) => ({ ...p, [id]: !p[id] })), []);
 
-  // Attached images, renamed to stable ref filenames for the worker upload.
-  const readImages = useCallback(async () => images.map((img, i) => {
-    const ext = img.name.substring(img.name.lastIndexOf('.')) || '.png';
-    return { name: `ref${i}${ext}`, base64: img.base64, dataUri: img.dataUri };
-  }), [images]);
+  // Images (already normalized to compact JPEG), with stable ref filenames.
+  const collectImages = useCallback(() => images.filter((m) => m.kind === 'image').map((m, i) => ({
+    name: `ref${i}.jpg`, base64: m.base64, dataUri: m.dataUri,
+  })), [images]);
+
+  // Shrink a video/audio item via ffmpeg (keeps it under RunPod's 10 MiB body)
+  // and return the compact clip as base64. Uses temp files, cleaned up after.
+  const shrinkToBase64 = useCallback(async (item, kind) => {
+    const dir = await tempDir();
+    const ext = item.name.substring(item.name.lastIndexOf('.')) || (kind === 'video' ? '.mp4' : '.m4a');
+    const inPath = await join(dir, `h3in_${Date.now()}_${Math.floor(performance.now())}${ext}`);
+    const bin = atob(item.base64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    await writeFile(inPath, arr);
+    let outPath;
+    try {
+      outPath = await invoke('ffmpeg_shrink_media', { inputPath: inPath, kind });
+      return bytesToBase64(await readFile(outPath));
+    } finally {
+      try { await remove(inPath); } catch { /* ignore */ }
+      try { if (outPath) await remove(outPath); } catch { /* ignore */ }
+    }
+  }, []);
 
   const handleBuildPrompt = useCallback(async () => {
     if (!description.trim()) { setError('Введите описание сцены'); return; }
     setIsBuilding(true); setError(null);
     try {
       const settings = await loadSettings();
-      const visionImgs = visionEnabled ? (await readImages()).map((x) => x.dataUri) : [];
+      const visionImgs = visionEnabled ? collectImages().map((x) => x.dataUri).filter(Boolean) : [];
       const prompt = await grokBuildPrompt({ tool, description, settings, enabledLoras, images: visionImgs });
       setGeneratedPrompt(prompt);
     } catch (err) {
@@ -214,7 +247,7 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
     } finally {
       setIsBuilding(false);
     }
-  }, [description, visionEnabled, enabledLoras, tool, loadSettings, readImages]);
+  }, [description, visionEnabled, enabledLoras, tool, loadSettings, collectImages]);
 
   const handleGenerate = useCallback(async () => {
     const finalPrompt = (generatedPrompt || description).trim();
@@ -230,10 +263,28 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
     const preset = ASPECT_PRESETS.find((p) => p.id === aspect) || ASPECT_PRESETS[0];
     const loraFiles = LORAS.filter((l) => enabledLoras[l.id]).flatMap((l) => l.files);
 
-    // Attach images. fl2va: first → first_frame, second → last_frame.
-    // ref2va: all (up to 3) → ref_image_0..N.
-    const uploaded = await readImages();
-    const inputImages = uploaded.map((u) => ({ name: u.name, image: u.base64 }));
+    const taskId = addTask({ type: `h3-${tool}`, title: `${meta.title}`, status: 'running', progress: 0, tabId });
+    currentTaskIdRef.current = taskId;
+    setIsProcessing(true); setError(null); setResultUrl(null); setProgressText('Подготовка материалов…');
+    abortRef.current = new AbortController();
+
+    // fl2va: images → first/last frame. ref2va: images → ref_image_N (uploaded),
+    // videos/audios → ffmpeg-shrunk base64 embedded in the workflow.
+    const imgs = collectImages();
+    const inputImages = imgs.map((u) => ({ name: u.name, image: u.base64 }));
+    let refVideosB64 = [];
+    let refAudiosB64 = [];
+    if (tool === 'ref2va') {
+      try {
+        for (const m of images.filter((m) => m.kind === 'video')) refVideosB64.push(await shrinkToBase64(m, 'video'));
+        for (const m of images.filter((m) => m.kind === 'audio')) refAudiosB64.push(await shrinkToBase64(m, 'audio'));
+      } catch (err) {
+        setError('Ошибка обработки видео/аудио: ' + (err.message || err));
+        setIsProcessing(false);
+        updateTask(taskId, { status: 'failed', error: String(err.message || err) });
+        return;
+      }
+    }
 
     const workflow = buildWorkflow({
       tool,
@@ -242,16 +293,12 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
       width: preset.width, height: preset.height,
       length: frames, steps: 20,
       seed: Math.floor(Math.random() * 2 ** 31),
-      firstFrameName: tool === 'fl2va' ? uploaded[0]?.name : undefined,
-      lastFrameName: tool === 'fl2va' ? uploaded[1]?.name : undefined,
-      refImageNames: tool === 'ref2va' ? uploaded.map((u) => u.name) : [],
+      firstFrameName: tool === 'fl2va' ? imgs[0]?.name : undefined,
+      lastFrameName: tool === 'fl2va' ? imgs[1]?.name : undefined,
+      refImageNames: tool === 'ref2va' ? imgs.map((u) => u.name) : [],
+      refVideosB64, refAudiosB64,
       loras: loraFiles,
     });
-
-    const taskId = addTask({ type: `h3-${tool}`, title: `${meta.title}`, status: 'running', progress: 0, tabId });
-    currentTaskIdRef.current = taskId;
-    setIsProcessing(true); setError(null); setResultUrl(null); setProgressText('Отправка…');
-    abortRef.current = new AbortController();
 
     try {
       const b64 = await runpodRunVideo({
@@ -273,7 +320,7 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
     } finally {
       setIsProcessing(false);
     }
-  }, [generatedPrompt, description, aspect, durationSeconds, enabledLoras, images, tool, meta, frames, addTask, updateTask, tabId, loadSettings, readImages]);
+  }, [generatedPrompt, description, aspect, durationSeconds, enabledLoras, images, tool, meta, frames, addTask, updateTask, tabId, loadSettings, collectImages, shrinkToBase64]);
 
   const handleCancel = useCallback(() => { abortRef.current?.abort(); setIsProcessing(false); }, []);
 
@@ -329,28 +376,38 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
               data-dropzone="true"
             >
               <div className="dropzone-placeholder">
-                {images.length >= meta.maxImages
-                  ? `Достигнут максимум (${meta.maxImages})`
-                  : `Перетащите изображение сюда или кликните для выбора (до ${meta.maxImages})`}
+                {tool === 'fl2va'
+                  ? 'Перетащите изображение сюда или кликните (до 2 кадров)'
+                  : 'Перетащите картинки / видео / аудио или кликните (по 3 каждого)'}
               </div>
             </div>
             {images.length > 0 && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-                {images.map((img, i) => (
-                  <div key={i} style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 6, padding: 6 }}>
-                    <img src={img.dataUri} alt={`ref ${i + 1}`} style={{ maxWidth: 120, maxHeight: 120, display: 'block' }} />
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      {tool === 'fl2va' ? (i === 0 ? 'Start frame' : i === 1 ? 'End frame' : `Image ${i + 1}`) : `Image ${i + 1}`}
-                    </span>
-                    <button onClick={(e) => { e.stopPropagation(); handleRemoveImage(i); }} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(255,0,0,0.8)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer' }}>✕</button>
-                  </div>
-                ))}
+                {images.map((m, i) => {
+                  const label = m.kind === 'image'
+                    ? (tool === 'fl2va' ? (i === 0 ? 'Start frame' : 'End frame') : 'Image')
+                    : (m.kind === 'video' ? '🎬 Video' : '🎵 Audio');
+                  return (
+                    <div key={i} style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 6, padding: 6, width: 132 }}>
+                      {m.kind === 'image' ? (
+                        <img src={m.dataUri} alt={m.name} style={{ maxWidth: 120, maxHeight: 120, display: 'block' }} />
+                      ) : (
+                        <div style={{ width: 120, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, background: 'var(--bg-tertiary)', borderRadius: 4 }}>
+                          {m.kind === 'video' ? '🎬' : '🎵'}
+                        </div>
+                      )}
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block' }}>{label}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                      <button onClick={(e) => { e.stopPropagation(); handleRemoveImage(i); }} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(255,0,0,0.8)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer' }}>✕</button>
+                    </div>
+                  );
+                })}
               </div>
             )}
-            {images.length > 0 && (
+            {images.some((m) => m.kind === 'image') && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: '0.9em' }}>
                 <input type="checkbox" checked={visionEnabled} onChange={(e) => setVisionEnabled(e.target.checked)} disabled={isProcessing} />
-                Grok смотрит на приложенные материалы (vision) при сборке промпта
+                Grok смотрит на приложенные картинки (vision) при сборке промпта
               </label>
             )}
           </div>

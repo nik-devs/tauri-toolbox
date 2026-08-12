@@ -436,6 +436,44 @@ pub async fn grok_chat(request: GrokChatRequest) -> Result<GrokChatResponse, Str
     Ok(GrokChatResponse { content })
 }
 
+/// Transcode a reference video/audio into a compact clip so it fits inside
+/// RunPod's 10 MiB /run body when embedded as base64. Reference conditioning
+/// doesn't need HD, so we downscale (512px short side, 24fps, 6s) / re-encode
+/// audio (96k, 15s). Returns the path of the shrunk file in the temp dir.
+#[tauri::command]
+pub async fn ffmpeg_shrink_media(input_path: String, kind: String) -> Result<String, String> {
+    let ff = ffmpeg_path()?;
+    let uniq = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let ext = if kind == "video" { "mp4" } else { "m4a" };
+    let out = std::env::temp_dir().join(format!("h3ref_{}.{}", uniq, ext));
+    let out_s = out.to_string_lossy().to_string();
+
+    let mut cmd = Command::new(&ff);
+    cmd.arg("-y").arg("-i").arg(&input_path);
+    if kind == "video" {
+        cmd.args([
+            "-t", "6",
+            "-vf", "scale='if(gt(iw,ih),-2,512)':'if(gt(iw,ih),512,-2)'",
+            "-r", "24",
+            "-c:v", "libx264", "-crf", "30", "-preset", "veryfast",
+            "-c:a", "aac", "-b:a", "96k",
+            "-movflags", "+faststart",
+        ]);
+    } else {
+        cmd.args(["-t", "15", "-vn", "-c:a", "aac", "-b:a", "96k"]);
+    }
+    cmd.arg(&out_s);
+
+    let status = cmd.status().map_err(|e| format!("Ошибка запуска ffmpeg: {}", e))?;
+    if !status.success() {
+        return Err("ffmpeg не смог перекодировать референс".to_string());
+    }
+    Ok(out_s)
+}
+
 /// Зацикливание видео: по длительности (-t) или по количеству циклов (-stream_loop N).
 /// mode: "duration" | "loops"
 /// duration: например "03:00:00" или "1:30", только для mode "duration"
