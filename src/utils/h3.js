@@ -198,22 +198,24 @@ export function buildWorkflow({
     const refInputs = {
       clip: ['clip', 0], vae: ['vaev', 0], audio_vae: ['vaea', 0],
       prompt, width, height, length,
+      ref_image_size: 'match', // required widget on MiniMaxH3ReferenceToVideo
     };
+    // Grouped inputs on MiniMaxH3ReferenceToVideo use dotted group.leaf keys.
     refImageNames.slice(0, MAX_REF_IMAGES).forEach((name, i) => {
-      refInputs[`ref_image_${i}`] = loadCropped(`ref${i}`, name);
+      refInputs[`ref_images.ref_image_${i}`] = loadCropped(`ref${i}`, name);
     });
     // Reference videos: base64 → LoadVideoBase64 → frames + paired soundtrack.
     refVideosB64.slice(0, MAX_REF_VIDEOS).forEach((b64, i) => {
       const nid = `refvid${i}`;
       wf[nid] = { class_type: 'LoadVideoBase64', inputs: { video_base64: b64 } };
-      refInputs[`ref_video_${i}`] = [nid, 0];       // IMAGE (frames)
-      refInputs[`ref_video_audio_${i}`] = [nid, 1]; // AUDIO (soundtrack)
+      refInputs[`ref_videos.ref_video_${i}`] = [nid, 0];              // IMAGE (frames)
+      refInputs[`ref_video_audios.ref_video_audio_${i}`] = [nid, 1];  // AUDIO (soundtrack)
     });
     // Standalone reference audio: base64 → LoadAudioBase64 → AUDIO.
     refAudiosB64.slice(0, MAX_REF_AUDIOS).forEach((b64, i) => {
       const nid = `refaud${i}`;
       wf[nid] = { class_type: 'LoadAudioBase64', inputs: { audio_base64: b64 } };
-      refInputs[`ref_audio_${i}`] = [nid, 0];
+      refInputs[`ref_audios.ref_audio_${i}`] = [nid, 0];
     });
     wf.h3 = { class_type: 'MiniMaxH3ReferenceToVideo', inputs: refInputs };
   } else {
