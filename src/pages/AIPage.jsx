@@ -1,8 +1,25 @@
+import { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { invoke } from '../hooks/useTauri';
 
 export default function AIPage() {
   const { handleOpenUtility } = useApp();
-  
+
+  // H3 tools are shown only when their endpoint URL is configured in Settings.
+  const [h3Endpoints, setH3Endpoints] = useState({ fl2va: false, ref2va: false });
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await invoke('load_settings');
+        const ak = s?.api_keys || {};
+        setH3Endpoints({
+          fl2va: !!(ak.Fl2vaEndpoint && ak.Fl2vaEndpoint.trim()),
+          ref2va: !!(ak.Ref2vaEndpoint && ak.Ref2vaEndpoint.trim()),
+        });
+      } catch { /* settings missing — keep both hidden */ }
+    })();
+  }, []);
+
   const utilities = [
     {
       id: 'upscale',
@@ -63,7 +80,19 @@ export default function AIPage() {
       icon: '🏷️',
       title: 'Image Tags',
       description: 'Генерация тегов для изображения с помощью AI'
-    }
+    },
+    ...(h3Endpoints.fl2va ? [{
+      id: 'h3-fl2va',
+      icon: '🎞️',
+      title: 'H3 Text/Image → Video',
+      description: 'MiniMax H3: видео со звуком из текста и опциональных кадров'
+    }] : []),
+    ...(h3Endpoints.ref2va ? [{
+      id: 'h3-ref2va',
+      icon: '🎞️',
+      title: 'H3 Reference → Video',
+      description: 'MiniMax H3: видео со звуком по референс-материалам'
+    }] : [])
   ];
 
   return (

@@ -20,6 +20,7 @@ fn main() {
             commands::load_settings,
             commands::check_path_is_directory,
             commands::replicate_run,
+            commands::grok_chat,
             commands::ffmpeg_loop_video,
             commands::ffmpeg_reverse_video,
             commands::ffmpeg_extract_sound,

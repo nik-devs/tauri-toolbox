@@ -15,7 +15,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleOpenUtility = useCallback((utilityId) => {
-    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video' || utilityId === 'video-upscale' || utilityId === 'camera-control' || utilityId === 'qwen-edit-plus' || utilityId === 'nano-edit-pro' || utilityId === 'image-to-pose' || utilityId === 'style-transfer' || utilityId === 'image-tags';
+    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video' || utilityId === 'video-upscale' || utilityId === 'camera-control' || utilityId === 'qwen-edit-plus' || utilityId === 'nano-edit-pro' || utilityId === 'image-to-pose' || utilityId === 'style-transfer' || utilityId === 'image-tags' || utilityId === 'h3-fl2va' || utilityId === 'h3-ref2va';
     
     if (isAiUtility) {
       // Для AI утилит создаем вкладку
@@ -31,6 +31,8 @@ export function AppProvider({ children }) {
         if (id === 'image-to-pose') return 'Image To Pose';
         if (id === 'style-transfer') return 'Style Transfer';
         if (id === 'image-tags') return 'Image Tags';
+        if (id === 'h3-fl2va') return 'H3 Text/Image→Video';
+        if (id === 'h3-ref2va') return 'H3 Reference→Video';
         return id;
       };
       const tab = {

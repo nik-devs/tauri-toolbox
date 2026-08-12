@@ -205,6 +205,24 @@ pub struct ApiKeys {
     pub runpod: Option<String>,
     #[serde(rename = "RunPodEndpoint")]
     pub runpod_endpoint: Option<String>,
+    // MiniMax H3 serverless endpoints (video + audio). Empty ⇒ the tool is hidden.
+    #[serde(rename = "Fl2vaEndpoint")]
+    pub fl2va_endpoint: Option<String>,
+    #[serde(rename = "Ref2vaEndpoint")]
+    pub ref2va_endpoint: Option<String>,
+    // User-authored prompt guidance injected into the Grok "build prompt" call.
+    #[serde(rename = "Fl2vaExamples")]
+    pub fl2va_examples: Option<String>,
+    #[serde(rename = "Ref2vaExamples")]
+    pub ref2va_examples: Option<String>,
+    #[serde(rename = "LoraHmpussyInstr")]
+    pub lora_hmpussy_instr: Option<String>,
+    #[serde(rename = "LoraRidingInstr")]
+    pub lora_riding_instr: Option<String>,
+    // Custom line prepended as the first line of BOTH the Grok system prompt
+    // and the user message. Whatever the user puts here, verbatim.
+    #[serde(rename = "GrokPrepend")]
+    pub grok_prepend: Option<String>,
 }
 
 fn get_settings_path() -> Result<PathBuf, String> {
@@ -341,6 +359,81 @@ pub async fn replicate_run(request: ReplicateRunRequest) -> Result<ReplicateRunR
     Ok(ReplicateRunResponse {
         output,
     })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GrokChatRequest {
+    pub system: String,
+    pub user: String,
+    pub api_key: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Optional image data URIs (data:image/...;base64,...) for vision input.
+    #[serde(default)]
+    pub images: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GrokChatResponse {
+    pub content: String,
+}
+
+/// Direct x.ai chat/completions call (run from Rust to avoid browser CORS).
+/// Returns the assistant message content. Model defaults to grok-4.5.
+#[tauri::command]
+pub async fn grok_chat(request: GrokChatRequest) -> Result<GrokChatResponse, String> {
+    let client = reqwest::Client::new();
+    let model = request.model.unwrap_or_else(|| "grok-4.5".to_string());
+
+    // User message: plain string, or a multimodal content array when images are
+    // attached (OpenAI/x.ai vision format: text part + image_url parts).
+    let user_content: serde_json::Value = match &request.images {
+        Some(imgs) if !imgs.is_empty() => {
+            let mut parts = vec![serde_json::json!({ "type": "text", "text": request.user })];
+            for uri in imgs {
+                parts.push(serde_json::json!({
+                    "type": "image_url",
+                    "image_url": { "url": uri }
+                }));
+            }
+            serde_json::Value::Array(parts)
+        }
+        _ => serde_json::Value::String(request.user.clone()),
+    };
+
+    let response = client
+        .post("https://api.x.ai/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", request.api_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "model": model,
+            "messages": [
+                { "role": "system", "content": request.system },
+                { "role": "user", "content": user_content }
+            ],
+            "temperature": 0.7
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса к x.ai: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("Ошибка x.ai API ({}): {}", status, error_text));
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка парсинга ответа x.ai: {}", e))?;
+
+    let content = data["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Не удалось извлечь ответ из x.ai")?
+        .to_string();
+
+    Ok(GrokChatResponse { content })
 }
 
 /// Зацикливание видео: по длительности (-t) или по количеству циклов (-stream_loop N).

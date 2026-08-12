@@ -13,19 +13,45 @@ const API_KEYS = {
   GPT: 'apiKeyGPT',
   Grok: 'apiKeyGrok',
   RunPod: 'apiKeyRunPod',
-  RunPodEndpoint: 'apiEndpointRunPod'
+  RunPodEndpoint: 'apiEndpointRunPod',
+  Fl2vaEndpoint: 'apiEndpointFl2va',
+  Ref2vaEndpoint: 'apiEndpointRef2va'
 };
 
+// Fields rendered as text inputs (not masked as passwords).
+const TEXT_FIELDS = new Set(['RunPodEndpoint', 'Fl2vaEndpoint', 'Ref2vaEndpoint']);
+
+// Multiline settings: user-authored prompt guidance fed to Grok for the H3
+// video tools, plus a custom line prepended to every Grok call.
+const TEXTAREAS = {
+  GrokPrepend: {
+    label: 'Grok: первая строка (в system и в user)',
+    placeholder: 'Строка, которая вставляется первой строкой в инструкцию и в сообщение пользователя'
+  },
+  Fl2vaExamples: {
+    label: 'fl2va: примеры / правила промптинга',
+    placeholder: 'Примеры и правила, которые Grok должен учитывать для fl2va'
+  },
+  Ref2vaExamples: {
+    label: 'ref2va: примеры / правила промптинга',
+    placeholder: 'Примеры и правила для reference-to-video (Image 1 / Video 1 …)'
+  },
+  LoraHmpussyInstr: {
+    label: 'LoRA HMPussy: инструкция для Grok',
+    placeholder: 'Триггеры, strength, что ставить в начало, примеры — применяется, когда лора включена'
+  },
+  LoraRidingInstr: {
+    label: 'LoRA Riding POV: инструкция для Grok',
+    placeholder: 'Триггеры, формат шаблона, примеры — применяется, когда лора включена'
+  }
+};
+
+const ALL_FIELDS = [...Object.keys(API_KEYS), ...Object.keys(TEXTAREAS)];
+
 export default function SettingsPage() {
-  const [apiKeys, setApiKeys] = useState({
-    FAL: '',
-    Replicate: '',
-    HF: '',
-    GPT: '',
-    Grok: '',
-    RunPod: '',
-    RunPodEndpoint: ''
-  });
+  const [apiKeys, setApiKeys] = useState(() =>
+    ALL_FIELDS.reduce((acc, k) => ({ ...acc, [k]: '' }), {})
+  );
   const [appVersion, setAppVersion] = useState('Загрузка...');
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
 
@@ -67,7 +93,7 @@ export default function SettingsPage() {
 
   const handleSave = useCallback(async () => {
     const keys = {};
-    Object.keys(API_KEYS).forEach(key => {
+    ALL_FIELDS.forEach(key => {
       if (apiKeys[key]?.trim()) {
         keys[key] = apiKeys[key].trim();
       }
@@ -88,7 +114,7 @@ export default function SettingsPage() {
 
   const handleExport = useCallback(async () => {
     const keys = {};
-    Object.keys(API_KEYS).forEach(key => {
+    ALL_FIELDS.forEach(key => {
       if (apiKeys[key]?.trim()) {
         keys[key] = apiKeys[key].trim();
       }
@@ -215,16 +241,39 @@ export default function SettingsPage() {
               <div key={key} className="form-group">
                 <label htmlFor={API_KEYS[key]}>{key}</label>
                 <input
-                  type={key === 'RunPodEndpoint' ? 'text' : 'password'}
+                  type={TEXT_FIELDS.has(key) ? 'text' : 'password'}
                   id={API_KEYS[key]}
                   className="form-input"
-                  placeholder={key === 'RunPodEndpoint' ? 'Введите эндпоинт RunPod' : `Введите ключ ${key}`}
+                  placeholder={TEXT_FIELDS.has(key) ? 'Введите URL эндпоинта' : `Введите ключ ${key}`}
                   value={apiKeys[key] || ''}
                   onChange={(e) => handleKeyChange(key, e.target.value)}
                   autoComplete="new-password"
                 />
               </div>
             ))}
+
+            {/* MiniMax H3 / Grok: пользовательские тексты промптинга */}
+            <div className="settings-section-header" style={{ marginTop: '20px' }}>
+              <h3 style={{ fontSize: '1em' }}>🎬 H3 промптинг (Grok)</h3>
+              <p className="section-description">
+                Тексты, которые Grok использует при сборке промптов. Всё необязательно.
+              </p>
+            </div>
+            {Object.keys(TEXTAREAS).map(key => (
+              <div key={key} className="form-group">
+                <label htmlFor={`ta-${key}`}>{TEXTAREAS[key].label}</label>
+                <textarea
+                  id={`ta-${key}`}
+                  className="form-input"
+                  rows={key === 'GrokPrepend' ? 2 : 5}
+                  placeholder={TEXTAREAS[key].placeholder}
+                  value={apiKeys[key] || ''}
+                  onChange={(e) => handleKeyChange(key, e.target.value)}
+                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+            ))}
+
             <div className="form-actions">
               <button
                 id="exportKeysBtn"

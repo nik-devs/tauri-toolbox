@@ -457,30 +457,23 @@ export default function ImageTags({ tabId = `image-tags-${Date.now()}`, isActive
         // Формируем строку тегов через запятую
         const tagsString = output.map(tag => tag.tag).join(', ');
         const translationPrompt = `Переведи на русский не меняя порядок и количество запятых:\n${tagsString}`;
-        
-        // Вызываем Replicate API для перевода
-        const translationResult = await invoke('replicate_run', {
+
+        // Перевод через x.ai (Grok 4.5). Ключ Grok — из настроек.
+        const settings = await invoke('load_settings');
+        const grokKey = settings?.api_keys?.Grok;
+        if (!grokKey) {
+          throw new Error('Не задан ключ Grok в настройках — перевод тегов пропущен');
+        }
+        const translationResult = await invoke('grok_chat', {
           request: {
-            model: "xai/grok-4",
-            input: {
-              top_p: 1,
-              prompt: translationPrompt,
-              max_tokens: 2048,
-              temperature: 0.1,
-              presence_penalty: 0,
-              frequency_penalty: 0
-            },
-            api_key: replicateKey
+            system: 'You are a precise translator. Preserve the exact order and number of comma-separated items.',
+            user: translationPrompt,
+            api_key: grokKey,
+            model: 'grok-4.5'
           }
         });
-        
-        // Получаем переведенную строку
-        let translatedString = '';
-        if (Array.isArray(translationResult.output)) {
-          translatedString = translationResult.output.join('');
-        } else if (typeof translationResult.output === 'string') {
-          translatedString = translationResult.output;
-        }
+
+        const translatedString = translationResult.content || '';
         
         // Парсим переведенные теги (разделяем по запятым и убираем пробелы)
         const translatedTagsArray = translatedString

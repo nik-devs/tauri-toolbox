@@ -22,6 +22,7 @@ import NanoEditPro from './components/utilities/NanoEditPro';
 import ImageToPose from './components/utilities/ImageToPose';
 import StyleTransfer from './components/utilities/StyleTransfer';
 import ImageTags from './components/utilities/ImageTags';
+import H3VideoTool from './components/utilities/H3VideoTool';
 import { setWindowTitle, checkForUpdates } from './hooks/useTauri';
 
 function AppContent() {
@@ -137,8 +138,18 @@ function AppContent() {
               }
               if (tab.utilityId === 'image-tags') {
                 return (
-                  <ImageTags 
-                    key={tab.id} 
+                  <ImageTags
+                    key={tab.id}
+                    tabId={tab.id}
+                    isActive={tab.active}
+                  />
+                );
+              }
+              if (tab.utilityId === 'h3-fl2va' || tab.utilityId === 'h3-ref2va') {
+                return (
+                  <H3VideoTool
+                    key={tab.id}
+                    tool={tab.utilityId === 'h3-fl2va' ? 'fl2va' : 'ref2va'}
                     tabId={tab.id}
                     isActive={tab.active}
                   />
@@ -238,8 +249,18 @@ function AppContent() {
               }
               if (tab.utilityId === 'image-tags') {
                 return (
-                  <ImageTags 
-                    key={tab.id} 
+                  <ImageTags
+                    key={tab.id}
+                    tabId={tab.id}
+                    isActive={false}
+                  />
+                );
+              }
+              if (tab.utilityId === 'h3-fl2va' || tab.utilityId === 'h3-ref2va') {
+                return (
+                  <H3VideoTool
+                    key={tab.id}
+                    tool={tab.utilityId === 'h3-fl2va' ? 'fl2va' : 'ref2va'}
                     tabId={tab.id}
                     isActive={false}
                   />
