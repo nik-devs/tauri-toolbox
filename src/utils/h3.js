@@ -179,27 +179,29 @@ export function buildWorkflow({
     modelRef = [id, 0];
   }
 
+  // Load an image and center-crop-to-cover the target WxH so it isn't stretched
+  // to the output aspect. Runs in the worker via the native ImageScale node
+  // (crop: 'center' scales to cover, then crops the center to exactly W×H).
+  const loadCropped = (nodeId, filename) => {
+    const loadId = `${nodeId}_load`;
+    wf[loadId] = { class_type: 'LoadImage', inputs: { image: filename } };
+    wf[nodeId] = { class_type: 'ImageScale', inputs: { image: [loadId, 0], upscale_method: 'lanczos', width, height, crop: 'center' } };
+    return [nodeId, 0];
+  };
+
   if (tool === 'ref2va') {
     const refInputs = {
       clip: ['clip', 0], vae: ['vaev', 0], audio_vae: ['vaea', 0],
       prompt, width, height, length,
     };
     refImageNames.slice(0, MAX_REF_IMAGES).forEach((name, i) => {
-      const nid = `ref${i}`;
-      wf[nid] = { class_type: 'LoadImage', inputs: { image: name } };
-      refInputs[`ref_image_${i}`] = [nid, 0];
+      refInputs[`ref_image_${i}`] = loadCropped(`ref${i}`, name);
     });
     wf.h3 = { class_type: 'MiniMaxH3ReferenceToVideo', inputs: refInputs };
   } else {
     const h3Inputs = { clip: ['clip', 0], vae: ['vaev', 0], prompt, width, height, length };
-    if (firstFrameName) {
-      wf.ff = { class_type: 'LoadImage', inputs: { image: firstFrameName } };
-      h3Inputs.first_frame = ['ff', 0];
-    }
-    if (lastFrameName) {
-      wf.lf = { class_type: 'LoadImage', inputs: { image: lastFrameName } };
-      h3Inputs.last_frame = ['lf', 0];
-    }
+    if (firstFrameName) h3Inputs.first_frame = loadCropped('ff', firstFrameName);
+    if (lastFrameName) h3Inputs.last_frame = loadCropped('lf', lastFrameName);
     wf.h3 = { class_type: 'MiniMaxH3ImageToVideo', inputs: h3Inputs };
   }
 

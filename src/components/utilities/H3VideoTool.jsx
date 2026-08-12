@@ -11,19 +11,50 @@ import {
   UNET, LORAS, buildWorkflow, runpodRunVideo, grokBuildPrompt,
 } from '../../utils/h3';
 
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp'];
-const MIME_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.bmp': 'image/bmp' };
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.heic', '.heif'];
+const DIALOG_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'heif'];
+const MIME_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.bmp': 'image/bmp', '.heic': 'image/heic', '.heif': 'image/heif' };
+const HEIC_EXTS = ['.heic', '.heif'];
+
+function isHeic(name, mime) {
+  const ext = name ? name.substring(name.lastIndexOf('.')).toLowerCase() : '';
+  return HEIC_EXTS.includes(ext) || /heic|heif/i.test(mime || '');
+}
+
+// The worker's Pillow can't read HEIC; WKWebView decodes it natively, so we
+// re-encode any HEIC/HEIF to PNG in-app via canvas before upload.
+async function blobToPng(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('Не удалось декодировать HEIC'));
+      im.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    const dataUri = canvas.toDataURL('image/png');
+    return { dataUri, base64: dataUri.split(',')[1] || '' };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 const TOOL_META = {
   fl2va: {
     title: 'MiniMax H3 — Text/Image → Video',
     endpointKey: 'Fl2vaEndpoint',
+    maxImages: 2,
     imagesHint: 'Опционально: 1–2 кадра. Первый — стартовый кадр, второй — финальный. Без кадров — чистый text-to-video.',
   },
   ref2va: {
     title: 'MiniMax H3 — Reference → Video',
     endpointKey: 'Ref2vaEndpoint',
-    imagesHint: 'Опционально: референс-изображения (Image 1, Image 2 …). Всё необязательно — можно и без референсов.',
+    maxImages: 3,
+    imagesHint: 'Опционально: до 3 референс-изображений (Image 1, Image 2 …). Всё необязательно — можно и без референсов.',
   },
 };
 
@@ -48,7 +79,9 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
   const [durationSeconds, setDurationSeconds] = useState(saved.durationSeconds ?? 5);
   const [enabledLoras, setEnabledLoras] = useState(saved.enabledLoras || {});
   const [visionEnabled, setVisionEnabled] = useState(saved.visionEnabled || false);
-  const [images, setImages] = useState([]); // {name, path, previewUrl, mime}
+  const [images, setImages] = useState([]); // {name, mime, base64, dataUri}
+  const [isDragging, setIsDragging] = useState(false);
+  const dropzoneRef = useRef(null);
   const [isBuilding, setIsBuilding] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressText, setProgressText] = useState('');
@@ -86,42 +119,87 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
     try { return await invoke('load_settings'); } catch { return { api_keys: {} }; }
   }, []);
 
-  const addImageFromPath = useCallback(async (path) => {
+  const addImage = useCallback((img) => {
+    setError(null);
+    setImages((prev) => {
+      if (prev.length >= meta.maxImages) {
+        setError(`Максимум ${meta.maxImages} изобр. для этого инструмента`);
+        return prev;
+      }
+      return [...prev, img];
+    });
+  }, [meta.maxImages]);
+
+  // From a browser File (drag-drop): keep bytes in memory; HEIC → PNG.
+  const addFromFile = useCallback(async (file) => {
+    const ext = file.name ? file.name.substring(file.name.lastIndexOf('.')).toLowerCase() : '';
+    if (!file.type?.startsWith('image/') && !IMAGE_EXTENSIONS.includes(ext)) {
+      setError('Поддерживаются только изображения'); return;
+    }
+    try {
+      const baseName = (file.name || `image${ext || '.png'}`);
+      if (isHeic(baseName, file.type)) {
+        const { dataUri, base64 } = await blobToPng(file);
+        addImage({ name: baseName.replace(/\.(heic|heif)$/i, '.png'), mime: 'image/png', base64, dataUri });
+        return;
+      }
+      const dataUri = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = (e) => resolve(e.target.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      addImage({ name: baseName, mime: file.type || MIME_TYPES[ext] || 'image/png', base64: dataUri.split(',')[1] || '', dataUri });
+    } catch (err) {
+      setError('Ошибка обработки файла: ' + (err.message || err));
+    }
+  }, [addImage]);
+
+  // From a filesystem path (file dialog): read bytes; HEIC → PNG.
+  const addFromPath = useCallback(async (path) => {
     const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
     if (!IMAGE_EXTENSIONS.includes(ext)) { setError('Поддерживаются только изображения'); return; }
-    const mime = MIME_TYPES[ext] || 'image/png';
     const bytes = await readFile(path);
-    const previewUrl = `data:${mime};base64,${bytesToBase64(bytes)}`;
     const name = path.split(/[/\\]/).pop();
-    setImages((prev) => [...prev, { name, path, previewUrl, mime }]);
-    setError(null);
-  }, []);
+    if (isHeic(name, '')) {
+      const { dataUri, base64 } = await blobToPng(new Blob([bytes], { type: 'image/heic' }));
+      addImage({ name: name.replace(/\.(heic|heif)$/i, '.png'), mime: 'image/png', base64, dataUri });
+      return;
+    }
+    const mime = MIME_TYPES[ext] || 'image/png';
+    const base64 = bytesToBase64(bytes);
+    addImage({ name, mime, base64, dataUri: `data:${mime};base64,${base64}` });
+  }, [addImage]);
 
   const handleAttach = useCallback(async () => {
     try {
-      const path = await openFileDialog({ filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }] });
-      if (path) await addImageFromPath(path);
+      const path = await openFileDialog({ filters: [{ name: 'Images', extensions: DIALOG_EXTENSIONS }] });
+      if (path) await addFromPath(path);
     } catch (err) {
       if (err !== 'User cancelled the dialog') setError('Ошибка выбора файла: ' + (err.message || err));
     }
-  }, [addImageFromPath]);
+  }, [addFromPath]);
+
+  const handleDragOver = useCallback((e) => { if (!isActive) return; e.preventDefault(); e.stopPropagation(); setIsDragging(true); }, [isActive]);
+  const handleDragLeave = useCallback((e) => {
+    if (!isActive) return; e.preventDefault(); e.stopPropagation();
+    if (!dropzoneRef.current?.contains(e.relatedTarget)) setIsDragging(false);
+  }, [isActive]);
+  const handleDrop = useCallback((e) => {
+    if (!isActive) return; e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    files.forEach((f) => addFromFile(f));
+  }, [isActive, addFromFile]);
 
   const handleRemoveImage = useCallback((i) => setImages((prev) => prev.filter((_, idx) => idx !== i)), []);
 
   const toggleLora = useCallback((id) => setEnabledLoras((p) => ({ ...p, [id]: !p[id] })), []);
 
-  // Read attached images into {name, base64, dataUri} for upload / vision.
-  const readImages = useCallback(async () => {
-    const out = [];
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const bytes = await readFile(img.path);
-      const b64 = bytesToBase64(bytes);
-      const ext = img.name.substring(img.name.lastIndexOf('.')) || '.png';
-      out.push({ name: `ref${i}${ext}`, base64: b64, dataUri: `data:${img.mime};base64,${b64}` });
-    }
-    return out;
-  }, [images]);
+  // Attached images, renamed to stable ref filenames for the worker upload.
+  const readImages = useCallback(async () => images.map((img, i) => {
+    const ext = img.name.substring(img.name.lastIndexOf('.')) || '.png';
+    return { name: `ref${i}${ext}`, base64: img.base64, dataUri: img.dataUri };
+  }), [images]);
 
   const handleBuildPrompt = useCallback(async () => {
     if (!description.trim()) { setError('Введите описание сцены'); return; }
@@ -241,16 +319,30 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
           <div className="settings-control" style={{ marginTop: 12 }}>
             <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Материалы (опционально)</label>
             <p style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginBottom: 8 }}>{meta.imagesHint}</p>
-            <button className="btn btn-secondary" onClick={handleAttach} disabled={isProcessing}>📎 Прикрепить изображение</button>
+            <div
+              ref={dropzoneRef}
+              className={`selected-folder ${images.length > 0 ? 'has-folder' : ''} ${isDragging && isActive ? 'drag-over' : ''}`}
+              onClick={isActive && !isProcessing ? handleAttach : undefined}
+              onDragOver={isActive ? handleDragOver : undefined}
+              onDragLeave={isActive ? handleDragLeave : undefined}
+              onDrop={isActive ? handleDrop : undefined}
+              data-dropzone="true"
+            >
+              <div className="dropzone-placeholder">
+                {images.length >= meta.maxImages
+                  ? `Достигнут максимум (${meta.maxImages})`
+                  : `Перетащите изображение сюда или кликните для выбора (до ${meta.maxImages})`}
+              </div>
+            </div>
             {images.length > 0 && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
                 {images.map((img, i) => (
                   <div key={i} style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 6, padding: 6 }}>
-                    <img src={img.previewUrl} alt={`ref ${i + 1}`} style={{ maxWidth: 120, maxHeight: 120, display: 'block' }} />
+                    <img src={img.dataUri} alt={`ref ${i + 1}`} style={{ maxWidth: 120, maxHeight: 120, display: 'block' }} />
                     <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                       {tool === 'fl2va' ? (i === 0 ? 'Start frame' : i === 1 ? 'End frame' : `Image ${i + 1}`) : `Image ${i + 1}`}
                     </span>
-                    <button onClick={() => handleRemoveImage(i)} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(255,0,0,0.8)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer' }}>✕</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveImage(i); }} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(255,0,0,0.8)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer' }}>✕</button>
                   </div>
                 ))}
               </div>
