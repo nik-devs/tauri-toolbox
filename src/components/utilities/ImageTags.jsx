@@ -574,13 +574,13 @@ export default function ImageTags({ tabId = `image-tags-${Date.now()}`, isActive
               </div>
             )}
 
-            {previewUrl && !tags && (
+            {previewUrl && (
               <button
                 className="btn btn-success"
                 disabled={isProcessing}
                 onClick={handleGenerateTags}
               >
-                🏷️ Генерировать теги
+                {tags ? '🔁 Генерировать заново' : '🏷️ Генерировать теги'}
               </button>
             )}
 

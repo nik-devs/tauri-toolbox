@@ -219,10 +219,12 @@ export default function StyleTransfer({ tabId = `style-transfer-${Date.now()}`, 
         userPrompt,
         denoisingStrength,
         selectedStyle,
+        iterations,
+        results,
         taskId: currentTaskIdRef.current
       });
     }
-  }, [selectedFile, previewUrl, resultUrl, userPrompt, denoisingStrength, selectedStyle, tabId, updateTabState]);
+  }, [selectedFile, previewUrl, resultUrl, userPrompt, denoisingStrength, selectedStyle, iterations, results, tabId, updateTabState]);
 
   // Очистка интервала при размонтировании
   useEffect(() => {

@@ -585,14 +585,14 @@ export default function ImageToPose({ tabId = `image-to-pose-${Date.now()}`, isA
               </div>
             )}
 
-            {!resultUrl && previewUrl && (
+            {previewUrl && (
               <button
                 id="generatePoseBtn"
                 className="btn btn-success"
                 disabled={(!selectedFile && !previewUrl) || isProcessing}
                 onClick={handleGenerate}
               >
-                🎭 Сгенерировать позу
+                {resultUrl ? '🔁 Сгенерировать заново' : '🎭 Сгенерировать позу'}
               </button>
             )}
 

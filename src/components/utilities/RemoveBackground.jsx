@@ -540,14 +540,14 @@ export default function RemoveBackground({ tabId = `remove-background-${Date.now
               </div>
             )}
 
-            {!resultUrl && (
+            {(selectedFile || previewUrl) && (
               <button
                 id="removeBackgroundBtn"
                 className="btn btn-success"
                 disabled={(!selectedFile && !previewUrl) || isProcessing}
                 onClick={handleRemoveBackground}
               >
-                ✂️ Удалить фон
+                {resultUrl ? '🔁 Удалить фон заново' : '✂️ Удалить фон'}
               </button>
             )}
 

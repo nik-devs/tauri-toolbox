@@ -758,14 +758,14 @@ export default function FrameToFrameVideo({ tabId = `frame-to-frame-${Date.now()
               </>
             )}
 
-            {!resultUrl && images.length >= 2 && (
+            {images.length >= 2 && (
               <button
                 id="generateVideoBtn"
                 className="btn btn-success"
                 disabled={!prompt || prompt.trim() === '' || isProcessing}
                 onClick={handleGenerate}
               >
-                🎬 Сгенерировать видео
+                {resultUrl ? '🔁 Сгенерировать заново' : '🎬 Сгенерировать видео'}
               </button>
             )}
 

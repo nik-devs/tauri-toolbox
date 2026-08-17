@@ -2,6 +2,29 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 const AppContext = createContext(null);
 
+// AI utilities open as tabs. The task `type` equals the utilityId, so a task in
+// the global list can reopen its tab via these maps.
+const AI_UTILITY_TITLES = {
+  'upscale': 'Upscale',
+  'remove-background': 'Remove Background',
+  'frame-to-frame-video': 'Frame To Frame Video',
+  'video-upscale': 'Video Upscale',
+  'camera-control': 'Camera Control',
+  'qwen-edit-plus': 'Qwen Edit Plus',
+  'nano-edit-pro': 'Nano Edit Pro',
+  'image-to-pose': 'Image To Pose',
+  'style-transfer': 'Style Transfer',
+  'image-tags': 'Image Tags',
+  'h3-fl2va': 'H3 Text/Image→Video',
+  'h3-ref2va': 'H3 Reference→Video',
+};
+export function isAiUtilityId(id) {
+  return Object.prototype.hasOwnProperty.call(AI_UTILITY_TITLES, id);
+}
+export function aiUtilityTitle(id) {
+  return AI_UTILITY_TITLES[id] || id;
+}
+
 export function AppProvider({ children }) {
   const [currentPage, setCurrentPage] = useState('tools');
   const [activeUtility, setActiveUtility] = useState(null);
@@ -15,44 +38,32 @@ export function AppProvider({ children }) {
   }, []);
 
   const handleOpenUtility = useCallback((utilityId) => {
-    const isAiUtility = utilityId === 'upscale' || utilityId === 'remove-background' || utilityId === 'frame-to-frame-video' || utilityId === 'video-upscale' || utilityId === 'camera-control' || utilityId === 'qwen-edit-plus' || utilityId === 'nano-edit-pro' || utilityId === 'image-to-pose' || utilityId === 'style-transfer' || utilityId === 'image-tags' || utilityId === 'h3-fl2va' || utilityId === 'h3-ref2va';
-    
-    if (isAiUtility) {
+    if (isAiUtilityId(utilityId)) {
       // Для AI утилит создаем вкладку
       const tabId = `ai-tab-${utilityId}-${Date.now()}`;
-      const getTitle = (id) => {
-        if (id === 'upscale') return 'Upscale';
-        if (id === 'remove-background') return 'Remove Background';
-        if (id === 'frame-to-frame-video') return 'Frame To Frame Video';
-        if (id === 'video-upscale') return 'Video Upscale';
-        if (id === 'camera-control') return 'Camera Control';
-        if (id === 'qwen-edit-plus') return 'Qwen Edit Plus';
-        if (id === 'nano-edit-pro') return 'Nano Edit Pro';
-        if (id === 'image-to-pose') return 'Image To Pose';
-        if (id === 'style-transfer') return 'Style Transfer';
-        if (id === 'image-tags') return 'Image Tags';
-        if (id === 'h3-fl2va') return 'H3 Text/Image→Video';
-        if (id === 'h3-ref2va') return 'H3 Reference→Video';
-        return id;
-      };
-      const tab = {
-        id: tabId,
-        utilityId,
-        title: getTitle(utilityId),
-        active: true
-      };
-      
-      setAiTabs(prev => {
-        // Деактивируем все предыдущие вкладки
-        const updated = prev.map(t => ({ ...t, active: false }));
-        return [...updated, tab];
-      });
+      const tab = { id: tabId, utilityId, title: aiUtilityTitle(utilityId), active: true };
+      setAiTabs(prev => [...prev.map(t => ({ ...t, active: false })), tab]);
       setCurrentPage('ai');
     } else {
       // Для обычных утилит - стандартное поведение
       setActiveUtility(utilityId);
       setCurrentPage('tools');
     }
+  }, []);
+
+  // Reopen (or focus) a tab from the global task list. If the tab still exists
+  // it's just activated; if it was closed, it's recreated with the SAME tabId
+  // so the component restores its state from the in-memory tab-state store.
+  const openTaskTab = useCallback((tabId, utilityId) => {
+    if (!tabId || !isAiUtilityId(utilityId)) return;
+    setAiTabs(prev => {
+      if (prev.some(t => t.id === tabId)) {
+        return prev.map(t => ({ ...t, active: t.id === tabId }));
+      }
+      const deactivated = prev.map(t => ({ ...t, active: false }));
+      return [...deactivated, { id: tabId, utilityId, title: aiUtilityTitle(utilityId), active: true }];
+    });
+    setCurrentPage('ai');
   }, []);
 
   const handleTabClick = useCallback((tabId) => {
@@ -91,7 +102,8 @@ export function AppProvider({ children }) {
     handleOpenUtility,
     handleTabClick,
     handleCloseTab,
-    handleBackToTools
+    handleBackToTools,
+    openTaskTab
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

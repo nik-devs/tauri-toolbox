@@ -559,14 +559,14 @@ export default function Upscale({ tabId = `upscale-${Date.now()}`, isActive = tr
               </div>
             )}
 
-            {!resultUrl && (
+            {(selectedFile || previewUrl) && (
               <button
                 id="upscaleBtn"
                 className="btn btn-success"
                 disabled={(!selectedFile && !previewUrl) || isProcessing}
                 onClick={handleUpscale}
               >
-                🔍 Увеличить разрешение
+                {resultUrl ? '🔁 Увеличить заново' : '🔍 Увеличить разрешение'}
               </button>
             )}
 

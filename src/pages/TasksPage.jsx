@@ -1,4 +1,5 @@
 import { useTasks } from '../contexts/TasksContext';
+import { useApp, isAiUtilityId } from '../contexts/AppContext';
 
 const STATUS_LABELS = {
   pending: '⏳ Ожидание',
@@ -18,6 +19,7 @@ const STATUS_COLORS = {
 
 export default function TasksPage() {
   const { tasks, removeTask } = useTasks();
+  const { openTaskTab } = useApp();
 
   const formatDate = (timestamp) => {
     if (!timestamp) return '—';
@@ -76,13 +78,24 @@ export default function TasksPage() {
                           </span>
                           <span>{task.title || task.type || 'Задача'}</span>
                         </div>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => removeTask(task.id)}
-                          title="Удалить задачу"
-                        >
-                          ✕
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          {task.tabId && isAiUtilityId(task.type) && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => openTaskTab(task.tabId, task.type)}
+                              title="Открыть вкладку задачи"
+                            >
+                              ↗ Открыть
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => removeTask(task.id)}
+                            title="Удалить задачу"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                       {task.description && (
                         <div className="task-description">{task.description}</div>

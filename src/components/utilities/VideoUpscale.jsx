@@ -598,14 +598,14 @@ export default function VideoUpscale({ tabId = `video-upscale-${Date.now()}`, is
               </div>
             )}
 
-            {!resultUrl && (
+            {(selectedFile || previewUrl) && (
               <button
                 id="upscaleBtn"
                 className="btn btn-success"
                 disabled={(!selectedFile && !previewUrl) || isProcessing}
                 onClick={handleUpscale}
               >
-                🎬 Увеличить разрешение
+                {resultUrl ? '🔁 Увеличить заново' : '🎬 Увеличить разрешение'}
               </button>
             )}
 

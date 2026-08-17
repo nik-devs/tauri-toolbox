@@ -48,7 +48,7 @@ const FIXED_INPUT = {
 
 export default function NanoEditPro({ tabId = `nano-edit-pro-${Date.now()}`, isActive = true }) {
   const { getTabState, updateTabState, setTabState } = useTabsState();
-  const { addTask, updateTask } = useTasks();
+  const { addTask, updateTask, tasks } = useTasks();
 
   const savedState = getTabState(tabId);
 
@@ -69,6 +69,24 @@ export default function NanoEditPro({ tabId = `nano-edit-pro-${Date.now()}`, isA
   const dropzoneRef = useRef(null);
   const currentTaskIdRef = useRef(savedState?.taskId || null);
   const restoredTabIdRef = useRef(null);
+
+  // Отражаем статус фоновой задачи после ремаунта: running / failed / completed.
+  useEffect(() => {
+    if (!currentTaskIdRef.current) return;
+    const task = tasks.find((t) => t.id === currentTaskIdRef.current);
+    if (!task) return;
+    if (task.status === 'running' && !isProcessing) {
+      setIsProcessing(true);
+    } else if (task.status === 'completed' && task.resultUrl && resultUrl !== task.resultUrl) {
+      setResultUrl(task.resultUrl); setIsProcessing(false);
+      updateTabState(tabId, { resultUrl: task.resultUrl });
+    } else if (task.status === 'failed' && !error) {
+      setError(task.error || 'Ошибка задачи'); setIsProcessing(false);
+    } else if (task.status !== 'running' && isProcessing) {
+      setIsProcessing(false);
+    }
+  }, [tasks, isProcessing, resultUrl, error, tabId, updateTabState]);
+
   // Реф с актуальным стейтом для сохранения при размонтировании (уход на Задачи и т.д.)
   const stateToSaveRef = useRef(null);
 
