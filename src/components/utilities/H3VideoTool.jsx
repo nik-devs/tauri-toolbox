@@ -94,7 +94,9 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
   const [durationSeconds, setDurationSeconds] = useState(saved.durationSeconds ?? 5);
   const [enabledLoras, setEnabledLoras] = useState(saved.enabledLoras || {});
   const [visionEnabled, setVisionEnabled] = useState(saved.visionEnabled || false);
-  const [images, setImages] = useState([]); // {name, mime, base64, dataUri}
+  // {kind, name, mime, base64, dataUri?} — kept in tab state so materials
+  // survive tab switches / remounts (the store is an in-memory Map).
+  const [images, setImages] = useState(saved.images || []);
   const [isDragging, setIsDragging] = useState(false);
   const dropzoneRef = useRef(null);
   const [isBuilding, setIsBuilding] = useState(false);
@@ -104,14 +106,53 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
   const [error, setError] = useState(null);
   const currentTaskIdRef = useRef(saved.taskId || null);
   const abortRef = useRef(null);
+  const resumedRef = useRef(false);
 
-  // Persist form state (not the in-memory image bytes).
+  // Persist full form state incl. attached materials, so nothing is lost on
+  // tab switch / remount. base64 lives in the in-memory Map (no storage quota).
   useEffect(() => {
     updateTabState(tabId, {
       description, generatedPrompt, aspect, durationSeconds, enabledLoras, visionEnabled,
-      resultUrl, taskId: currentTaskIdRef.current,
+      images, resultUrl, taskId: currentTaskIdRef.current,
     });
-  }, [description, generatedPrompt, aspect, durationSeconds, enabledLoras, visionEnabled, resultUrl, tabId, updateTabState]);
+  }, [description, generatedPrompt, aspect, durationSeconds, enabledLoras, visionEnabled, images, resultUrl, tabId, updateTabState]);
+
+  // Reconnect to an in-flight/finished RunPod job after a remount so the video
+  // isn't lost when the tab was switched away mid-generation.
+  useEffect(() => {
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    const jid = saved.runpodJobId;
+    if (!jid || saved.resultUrl) return;
+    (async () => {
+      let settings;
+      try { settings = await invoke('load_settings'); } catch { return; }
+      const ak = settings?.api_keys || {};
+      const endpoint = ak[meta.endpointKey];
+      const apiKey = ak.RunPod;
+      if (!endpoint || !apiKey) return;
+      setIsProcessing(true); setError(null); setProgressText('Восстановление задачи…');
+      abortRef.current = new AbortController();
+      try {
+        const b64 = await runpodRunVideo({
+          endpoint, apiKey, resumeJobId: jid, signal: abortRef.current.signal,
+          onProgress: (pct, text) => setProgressText(text),
+        });
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([arr], { type: 'video/mp4' }));
+        setResultUrl(url);
+        updateTabState(tabId, { runpodJobId: null, resultUrl: url });
+      } catch (err) {
+        setError('Не удалось восстановить задачу (возможно, истёк срок хранения результата): ' + (err.message || err));
+        updateTabState(tabId, { runpodJobId: null });
+      } finally {
+        setIsProcessing(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync with background task.
   useEffect(() => {
@@ -305,6 +346,9 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
         endpoint, apiKey, workflow,
         images: inputImages.length ? inputImages : undefined,
         signal: abortRef.current.signal,
+        // Persist the RunPod job id so the result survives a tab switch / reset:
+        // on remount the tool reconnects to this job and pulls the video.
+        onJob: (jid) => updateTabState(tabId, { runpodJobId: jid }),
         onProgress: (pct, text) => { setProgressText(text); updateTask(taskId, { progress: pct, status: 'running' }); },
       });
       const bin = atob(b64);
@@ -312,15 +356,17 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
       const url = URL.createObjectURL(new Blob([arr], { type: 'video/mp4' }));
       setResultUrl(url);
+      updateTabState(tabId, { runpodJobId: null, resultUrl: url });
       updateTask(taskId, { progress: 100, status: 'completed', resultUrl: url });
     } catch (err) {
       const msg = err.message || String(err);
       setError(msg);
+      updateTabState(tabId, { runpodJobId: null });
       updateTask(taskId, { status: 'failed', error: msg });
     } finally {
       setIsProcessing(false);
     }
-  }, [generatedPrompt, description, aspect, durationSeconds, enabledLoras, images, tool, meta, frames, addTask, updateTask, tabId, loadSettings, collectImages, shrinkToBase64]);
+  }, [generatedPrompt, description, aspect, durationSeconds, enabledLoras, images, tool, meta, frames, addTask, updateTask, updateTabState, tabId, loadSettings, collectImages, shrinkToBase64]);
 
   const handleCancel = useCallback(() => { abortRef.current?.abort(); setIsProcessing(false); }, []);
 

@@ -244,24 +244,32 @@ function normalizeEndpoint(raw) {
 // Submit a workflow to a RunPod serverless endpoint and poll until terminal.
 // `images` is worker-comfyui's upload channel: [{name, image}] where image is
 // bare base64 (no data: prefix); each name is referenced by a LoadImage node.
-// onProgress(pct, statusText) is called as it advances. Returns base64 mp4.
-export async function runpodRunVideo({ endpoint, apiKey, workflow, images, onProgress, signal }) {
+// onProgress(pct, statusText) is called as it advances. onJob(jobId) fires once
+// the job id is known (persist it to survive tab switches / restarts).
+// resumeJobId reconnects to an already-submitted job instead of POSTing a new
+// one — used to recover an in-flight/finished job after the UI reset.
+// Returns base64 mp4.
+export async function runpodRunVideo({ endpoint, apiKey, workflow, images, onProgress, signal, resumeJobId, onJob }) {
   const base = normalizeEndpoint(endpoint);
   if (!base) throw new Error('Не задан эндпоинт RunPod для этого инструмента.');
   if (!apiKey) throw new Error('Не найден ключ RunPod. Добавьте его в настройках.');
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` };
 
-  const input = { workflow };
-  if (images && images.length) input.images = images;
-  const runRes = await fetch(`${base}/run`, {
-    method: 'POST', headers, signal,
-    body: JSON.stringify({ input }),
-  });
-  if (!runRes.ok) throw new Error(`RunPod /run вернул HTTP ${runRes.status}: ${(await runRes.text()).slice(0, 300)}`);
-  const runData = await runRes.json();
-  const jobId = runData.id;
-  if (!jobId) throw new Error('RunPod не вернул id задачи');
-  onProgress?.(10, 'В очереди…');
+  let jobId = resumeJobId;
+  if (!jobId) {
+    const input = { workflow };
+    if (images && images.length) input.images = images;
+    const runRes = await fetch(`${base}/run`, {
+      method: 'POST', headers, signal,
+      body: JSON.stringify({ input }),
+    });
+    if (!runRes.ok) throw new Error(`RunPod /run вернул HTTP ${runRes.status}: ${(await runRes.text()).slice(0, 300)}`);
+    const runData = await runRes.json();
+    jobId = runData.id;
+    if (!jobId) throw new Error('RunPod не вернул id задачи');
+    onJob?.(jobId);
+  }
+  onProgress?.(10, resumeJobId ? 'Восстановление задачи…' : 'В очереди…');
 
   const deadline = Date.now() + 40 * 60_000; // generous for cold start + long clips
   while (Date.now() < deadline) {
