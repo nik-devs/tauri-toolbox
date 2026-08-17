@@ -460,11 +460,11 @@ export default function H3VideoTool({ tool, tabId = `h3-${tool}-${Date.now()}`, 
             </div>
           </div>
 
-          {!resultUrl && (
-            <button className="btn btn-success" style={{ marginTop: 14 }} onClick={handleGenerate} disabled={isProcessing || (!generatedPrompt && !description.trim())}>
-              🎬 Сгенерировать видео
-            </button>
-          )}
+          {/* Всегда доступна — можно поправить промпт/материалы/параметры и
+              перегенерить, не сбрасывая форму через «Очистить». */}
+          <button className="btn btn-success" style={{ marginTop: 14 }} onClick={handleGenerate} disabled={isProcessing || (!generatedPrompt && !description.trim())}>
+            {resultUrl ? '🔁 Сгенерировать заново' : '🎬 Сгенерировать видео'}
+          </button>
 
           {isProcessing && (
             <div className="progress" style={{ marginTop: 12 }}>
